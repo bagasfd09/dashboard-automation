@@ -1,0 +1,106 @@
+import type { FastifyInstance } from 'fastify';
+import { authenticate } from '../middleware/auth.js';
+import * as runService from '../services/runService.js';
+import type { RunStatus } from '@qc-monitor/db';
+
+export async function runRoutes(fastify: FastifyInstance) {
+  fastify.post(
+    '/',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      if (!request.team) return reply.code(401).send({ error: 'API key required', statusCode: 401 });
+      try {
+        const run = await runService.createRun(request.team.id);
+        return reply.code(201).send(run);
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ error: 'Internal server error', statusCode: 500 });
+      }
+    },
+  );
+
+  fastify.patch(
+    '/:id',
+    {
+      preHandler: authenticate,
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string' } },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['RUNNING', 'PASSED', 'FAILED', 'CANCELLED'] },
+            duration: { type: 'integer', minimum: 0 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.team) return reply.code(401).send({ error: 'API key required', statusCode: 401 });
+      const { id } = request.params as { id: string };
+      const body = request.body as { status?: RunStatus; duration?: number };
+      try {
+        const run = await runService.updateRun(id, request.team.id, body);
+        if (!run) return reply.code(404).send({ error: 'Run not found', statusCode: 404 });
+        return reply.send(run);
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ error: 'Internal server error', statusCode: 500 });
+      }
+    },
+  );
+
+  fastify.get(
+    '/',
+    {
+      preHandler: authenticate,
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', minimum: 1, default: 1 },
+            limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { page, limit } = request.query as { page?: number; limit?: number };
+      try {
+        const result = await runService.listRuns(request.team?.id, page, limit);
+        return reply.send(result);
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ error: 'Internal server error', statusCode: 500 });
+      }
+    },
+  );
+
+  fastify.get(
+    '/:id',
+    {
+      preHandler: authenticate,
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string' } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const run = await runService.getRun(id, request.team?.id);
+        if (!run) return reply.code(404).send({ error: 'Run not found', statusCode: 404 });
+        return reply.send(run);
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ error: 'Internal server error', statusCode: 500 });
+      }
+    },
+  );
+}

@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+.turbo/
+
+# Environment secrets — never commit
+.env
+.env.local
+.env*.local
+
+# pnpm
+pnpm-debug.log*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Claude Code session files
+.claude/
+
+# Prisma generated client (regenerated via db:generate)
+packages/db/src/generated/
+
+# MinIO / test artifacts
+test-results/
+playwright-report/
+blob-report/

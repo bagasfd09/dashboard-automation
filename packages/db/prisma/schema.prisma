@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Team {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  apiKey    String     @unique @default(cuid())
+  testCases TestCase[]
+  testRuns  TestRun[]
+  createdAt DateTime   @default(now())
+}
+
+model TestCase {
+  id        String       @id @default(cuid())
+  title     String
+  filePath  String
+  tags      String[]
+  teamId    String
+  team      Team         @relation(fields: [teamId], references: [id])
+  results   TestResult[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([teamId, filePath, title])
+}
+
+model TestRun {
+  id          String       @id @default(cuid())
+  teamId      String
+  team        Team         @relation(fields: [teamId], references: [id])
+  status      RunStatus    @default(RUNNING)
+  results     TestResult[]
+  totalTests  Int          @default(0)
+  passed      Int          @default(0)
+  failed      Int          @default(0)
+  skipped     Int          @default(0)
+  duration    Int?
+  startedAt   DateTime     @default(now())
+  finishedAt  DateTime?
+}
+
+model TestResult {
+  id         String     @id @default(cuid())
+  testCaseId String
+  testCase   TestCase   @relation(fields: [testCaseId], references: [id])
+  testRunId  String
+  testRun    TestRun    @relation(fields: [testRunId], references: [id])
+  status     TestStatus
+  duration   Int?
+  error      String?
+  retryCount Int        @default(0)
+  artifacts  Artifact[]
+  startedAt  DateTime   @default(now())
+  finishedAt DateTime?
+}
+
+model Artifact {
+  id           String       @id @default(cuid())
+  testResultId String
+  testResult   TestResult   @relation(fields: [testResultId], references: [id])
+  type         ArtifactType
+  fileName     String
+  fileUrl      String
+  fileSize     Int?
+  createdAt    DateTime     @default(now())
+}
+
+enum RunStatus {
+  RUNNING
+  PASSED
+  FAILED
+  CANCELLED
+}
+
+enum TestStatus {
+  PASSED
+  FAILED
+  SKIPPED
+  RETRIED
+}
+
+enum ArtifactType {
+  SCREENSHOT
+  VIDEO
+  TRACE
+  LOG
+}

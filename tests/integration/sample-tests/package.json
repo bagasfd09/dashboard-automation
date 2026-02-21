@@ -1,0 +1,5 @@
+{
+  "name": "integration-sample-tests",
+  "private": true,
+  "description": "QC Monitor integration test suite — not a workspace package, deps come from monorepo root"
+}

@@ -1,0 +1,865 @@
+{
+  "info": {
+    "name": "QC Monitor API",
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "description": "API collection for QC Monitor dashboard automation.\n\n## Base URLs\n- HTTP API: `http://localhost:3001`\n- WebSocket: `ws://localhost:3001/ws?apiKey={apiKey}`\n\n## Recommended workflow\n1. **Create Team** → `teamId` + `apiKey` are captured automatically\n2. **WebSocket → Connect** — open a WS connection to see live events\n3. **Test Cases → Sync** → `testCaseId` captured from first item\n4. **Runs → Create Run** → `testRunId` captured\n5. **Results → Create Result** → `testResultId` captured\n6. **Artifacts → Upload** → `artifactId` captured\n7. **Runs → Finish Run** → broadcasts `run:finished`\n\n## WebSocket events\n| Event | Triggered by |\n|---|---|\n| `connected` | Successful WS connection |\n| `run:started` | `POST /api/runs` |\n| `run:finished` | `PATCH /api/runs/:id` |\n| `result:new` | `POST /api/results` |\n| `result:failed` | `POST /api/results` with `status: FAILED` |\n| `artifact:new` | `POST /api/artifacts/upload` |\n\nEvent payload shape: `{ event: string, data: object, timestamp: string }`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001",
+      "type": "string",
+      "description": "HTTP API base URL"
+    },
+    {
+      "key": "wsBaseUrl",
+      "value": "ws://localhost:3001",
+      "type": "string",
+      "description": "WebSocket base URL"
+    },
+    {
+      "key": "apiKey",
+      "value": "",
+      "type": "string",
+      "description": "Team API key — auto-set after Create Team"
+    },
+    {
+      "key": "teamId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-set after Create Team"
+    },
+    {
+      "key": "testCaseId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-set after Sync Test Cases (first item)"
+    },
+    {
+      "key": "testRunId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-set after Create Run"
+    },
+    {
+      "key": "testResultId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-set after Create Result"
+    },
+    {
+      "key": "artifactId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-set after Upload Artifact"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verify the API is up. Returns current timestamp and process uptime. No auth required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/health" }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"status\": \"ok\",\n  \"timestamp\": \"2026-02-21T00:00:00.000Z\",\n  \"uptime\": 42.5\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Teams",
+      "item": [
+        {
+          "name": "Create Team",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.id)     pm.collectionVariables.set('teamId',  res.id);",
+                  "if (res.apiKey) pm.collectionVariables.set('apiKey',  res.apiKey);",
+                  "console.log('teamId:', res.id, ' | apiKey:', res.apiKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Team Alpha\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/teams",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "teams"]
+            },
+            "description": "Create a new team. **No auth required.**\n\nThe response includes an auto-generated `apiKey` (a cuid) used to authenticate all subsequent requests. The test script automatically stores `teamId` and `apiKey` as collection variables."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"name\":\"QA Team Alpha\"}"
+                },
+                "url": { "raw": "{{baseUrl}}/api/teams" }
+              },
+              "status": "Created",
+              "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"cm1abc123\",\n  \"name\": \"QA Team Alpha\",\n  \"apiKey\": \"cm1xyz789\",\n  \"createdAt\": \"2026-02-21T00:00:00.000Z\"\n}"
+            },
+            {
+              "name": "409 Conflict — name already exists",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{baseUrl}}/api/teams" }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "body": "{\n  \"error\": \"Team name already exists\",\n  \"statusCode\": 409\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WebSocket",
+      "description": "Real-time event stream for the dashboard.\n\nIn Postman: open a **New WebSocket Request** tab, paste the URL, click Connect, then watch the Messages panel.\n\nSend `{\"type\":\"ping\"}` to test the keepalive — server replies with `{\"type\":\"pong\"}`.",
+      "item": [
+        {
+          "name": "Connect — Dashboard Live Feed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{wsBaseUrl}}/ws?apiKey={{apiKey}}",
+              "protocol": "ws",
+              "host": ["{{wsBaseUrl}}"],
+              "path": ["ws"],
+              "query": [
+                {
+                  "key": "apiKey",
+                  "value": "{{apiKey}}",
+                  "description": "Team API key — auto-set after Create Team"
+                }
+              ]
+            },
+            "description": "Open a persistent WebSocket connection to receive real-time events for the authenticated team.\n\n**Auth:** `apiKey` query param (same key used in `x-api-key` header for REST calls).\n- Missing or invalid key → connection closed immediately with code **4001**.\n- Valid key → server sends `connected` event, then pushes all subsequent activity.\n\n**Events pushed (format: `{ event, data, timestamp }`):**\n| Event | When |\n|---|---|\n| `connected` | Right after successful auth |\n| `run:started` | New run created via `POST /api/runs` |\n| `run:finished` | Run updated via `PATCH /api/runs/:id` |\n| `result:new` | Any new result via `POST /api/results` |\n| `result:failed` | New result with `status: FAILED` |\n| `artifact:new` | File uploaded via `POST /api/artifacts/upload` |\n\n**Keepalive:** send `{\"type\":\"ping\"}` → receive `{\"type\":\"pong\",\"timestamp\":\"...\"}` \n\n**Scaling:** when `REDIS_URL` is set, events are pub/sub'd across multiple API instances via `team:{teamId}:events` channels so all connected dashboards receive updates regardless of which instance handled the REST call."
+          },
+          "response": [
+            {
+              "name": "connected event (example)",
+              "body": "{\n  \"event\": \"connected\",\n  \"data\": { \"teamId\": \"cm1abc123\" },\n  \"timestamp\": \"2026-02-21T00:00:00.000Z\"\n}"
+            },
+            {
+              "name": "run:started event (example)",
+              "body": "{\n  \"event\": \"run:started\",\n  \"data\": {\n    \"id\": \"cm1run001\",\n    \"teamId\": \"cm1abc123\",\n    \"status\": \"RUNNING\",\n    \"totalTests\": 0,\n    \"passed\": 0,\n    \"failed\": 0,\n    \"skipped\": 0,\n    \"duration\": null,\n    \"startedAt\": \"2026-02-21T00:00:00.000Z\",\n    \"finishedAt\": null\n  },\n  \"timestamp\": \"2026-02-21T00:00:00.000Z\"\n}"
+            },
+            {
+              "name": "result:failed event (example)",
+              "body": "{\n  \"event\": \"result:failed\",\n  \"data\": {\n    \"id\": \"cm1res002\",\n    \"testRunId\": \"cm1run001\",\n    \"testCaseId\": \"cm1tc002\",\n    \"status\": \"FAILED\",\n    \"duration\": 5000,\n    \"error\": \"Expected element to be visible but it was hidden\",\n    \"retryCount\": 2,\n    \"startedAt\": \"2026-02-21T00:00:01.000Z\",\n    \"finishedAt\": null\n  },\n  \"timestamp\": \"2026-02-21T00:00:01.000Z\"\n}"
+            },
+            {
+              "name": "run:finished event (example)",
+              "body": "{\n  \"event\": \"run:finished\",\n  \"data\": {\n    \"id\": \"cm1run001\",\n    \"teamId\": \"cm1abc123\",\n    \"status\": \"FAILED\",\n    \"totalTests\": 3,\n    \"passed\": 2,\n    \"failed\": 1,\n    \"skipped\": 0,\n    \"duration\": 12345,\n    \"startedAt\": \"2026-02-21T00:00:00.000Z\",\n    \"finishedAt\": \"2026-02-21T00:00:12.000Z\"\n  },\n  \"timestamp\": \"2026-02-21T00:00:12.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Connect — Invalid key (expect close 4001)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{wsBaseUrl}}/ws?apiKey=bad-key",
+              "protocol": "ws",
+              "host": ["{{wsBaseUrl}}"],
+              "path": ["ws"],
+              "query": [
+                { "key": "apiKey", "value": "bad-key" }
+              ]
+            },
+            "description": "Connects with a deliberately wrong API key. The server closes the connection immediately with WebSocket close code **4001** and reason string `'Invalid API key'`.\n\nUse this to verify auth rejection behaviour."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Cases",
+      "item": [
+        {
+          "name": "Sync Test Cases",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.items && res.items.length > 0) {",
+                  "  pm.collectionVariables.set('testCaseId', res.items[0].id);",
+                  "  console.log('testCaseId:', res.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"testCases\": [\n    {\n      \"title\": \"should display login form\",\n      \"filePath\": \"tests/auth/login.spec.ts\",\n      \"tags\": [\"auth\", \"smoke\"]\n    },\n    {\n      \"title\": \"should submit checkout form\",\n      \"filePath\": \"tests/checkout/submit.spec.ts\",\n      \"tags\": [\"checkout\"]\n    },\n    {\n      \"title\": \"should load dashboard\",\n      \"filePath\": \"tests/dashboard/index.spec.ts\",\n      \"tags\": [\"smoke\"]\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/test-cases/sync",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "test-cases", "sync"]
+            },
+            "description": "Upsert test cases by the composite key `(teamId, filePath, title)`. **Idempotent** — safe to call on every CI run. Only `tags` is updated on existing cases.\n\nAutomatically stores the first returned `testCaseId`."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "x-api-key", "value": "{{apiKey}}" }
+                ],
+                "url": { "raw": "{{baseUrl}}/api/test-cases/sync" }
+              },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"synced\": 3,\n  \"items\": [\n    {\n      \"id\": \"cm1tc001\",\n      \"title\": \"should display login form\",\n      \"filePath\": \"tests/auth/login.spec.ts\",\n      \"tags\": [\"auth\", \"smoke\"],\n      \"teamId\": \"cm1abc123\",\n      \"createdAt\": \"2026-02-21T00:00:00.000Z\",\n      \"updatedAt\": \"2026-02-21T00:00:00.000Z\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{baseUrl}}/api/test-cases/sync" }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"error\": \"Invalid API key\",\n  \"statusCode\": 401\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Test Cases",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/test-cases?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "test-cases"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "FAILED",
+                  "description": "Filter by last result status: PASSED | FAILED | SKIPPED | RETRIED",
+                  "disabled": true
+                },
+                {
+                  "key": "tag",
+                  "value": "smoke",
+                  "description": "Filter by tag (exact match)",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "login",
+                  "description": "Case-insensitive search in title or filePath",
+                  "disabled": true
+                },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "List test cases for the authenticated team. All query params are optional.\n\n- `status` — include only cases that have at least one result with this status\n- `tag` — include only cases whose `tags` array contains this value\n- `search` — case-insensitive match against `title` or `filePath`\n- `page` / `limit` — pagination (default: page 1, limit 20, max limit 100)"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+                "url": { "raw": "{{baseUrl}}/api/test-cases?page=1&limit=20" }
+              },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"items\": [],\n  \"total\": 0,\n  \"page\": 1,\n  \"limit\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Test Case",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/test-cases/{{testCaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "test-cases", "{{testCaseId}}"]
+            },
+            "description": "Get a single test case by ID. Includes the most recent result (with its artifacts)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+                "url": { "raw": "{{baseUrl}}/api/test-cases/{{testCaseId}}" }
+              },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"cm1tc001\",\n  \"title\": \"should display login form\",\n  \"filePath\": \"tests/auth/login.spec.ts\",\n  \"tags\": [\"auth\", \"smoke\"],\n  \"teamId\": \"cm1abc123\",\n  \"createdAt\": \"2026-02-21T00:00:00.000Z\",\n  \"updatedAt\": \"2026-02-21T00:00:00.000Z\",\n  \"results\": [\n    {\n      \"id\": \"cm1res001\",\n      \"status\": \"PASSED\",\n      \"duration\": 1342,\n      \"startedAt\": \"2026-02-21T00:00:00.000Z\",\n      \"artifacts\": []\n    }\n  ]\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/api/test-cases/{{testCaseId}}" }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Test case not found\",\n  \"statusCode\": 404\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Runs",
+      "item": [
+        {
+          "name": "Create Run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.id) pm.collectionVariables.set('testRunId', res.id);",
+                  "console.log('testRunId:', res.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "runs"]
+            },
+            "description": "Start a new test run. Status defaults to `RUNNING`. No body required — the team is inferred from `x-api-key`.\n\n**WS event pushed:** `run:started`\n\nAutomatically stores `testRunId`."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+                "url": { "raw": "{{baseUrl}}/api/runs" }
+              },
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"id\": \"cm1run001\",\n  \"teamId\": \"cm1abc123\",\n  \"status\": \"RUNNING\",\n  \"totalTests\": 0,\n  \"passed\": 0,\n  \"failed\": 0,\n  \"skipped\": 0,\n  \"duration\": null,\n  \"startedAt\": \"2026-02-21T00:00:00.000Z\",\n  \"finishedAt\": null\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{baseUrl}}/api/runs" }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"error\": \"Missing API key\",\n  \"statusCode\": 401\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Runs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "runs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "List all runs for the authenticated team, newest first. Paginated with `page` + `limit`."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+                "url": { "raw": "{{baseUrl}}/api/runs?page=1&limit=20" }
+              },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"items\": [],\n  \"total\": 0,\n  \"page\": 1,\n  \"limit\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Run",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/{{testRunId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "runs", "{{testRunId}}"]
+            },
+            "description": "Get a single run with all its results, including `testCase` info and `artifacts` for each result."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+                "url": { "raw": "{{baseUrl}}/api/runs/{{testRunId}}" }
+              },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"cm1run001\",\n  \"teamId\": \"cm1abc123\",\n  \"status\": \"RUNNING\",\n  \"totalTests\": 1,\n  \"passed\": 1,\n  \"failed\": 0,\n  \"skipped\": 0,\n  \"duration\": null,\n  \"startedAt\": \"2026-02-21T00:00:00.000Z\",\n  \"finishedAt\": null,\n  \"results\": [\n    {\n      \"id\": \"cm1res001\",\n      \"testCaseId\": \"cm1tc001\",\n      \"status\": \"PASSED\",\n      \"duration\": 1342,\n      \"error\": null,\n      \"retryCount\": 0,\n      \"startedAt\": \"2026-02-21T00:00:00.000Z\",\n      \"testCase\": {\n        \"id\": \"cm1tc001\",\n        \"title\": \"should display login form\",\n        \"filePath\": \"tests/auth/login.spec.ts\",\n        \"tags\": [\"auth\", \"smoke\"]\n      },\n      \"artifacts\": []\n    }\n  ]\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/api/runs/{{testRunId}}" }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Run not found\",\n  \"statusCode\": 404\n}"
+            }
+          ]
+        },
+        {
+          "name": "Finish Run (PASSED)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PASSED\",\n  \"duration\": 12345\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/{{testRunId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "runs", "{{testRunId}}"]
+            },
+            "description": "Finish a test run. `totalTests`, `passed`, `failed`, `skipped` are **recomputed from DB results** automatically — no need to track them client-side. `finishedAt` is set whenever `status` is not `RUNNING`.\n\n`status`: `PASSED` | `FAILED` | `CANCELLED`\n`duration`: total duration in milliseconds (optional)\n\n**WS event pushed:** `run:finished`"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "x-api-key", "value": "{{apiKey}}" }
+                ],
+                "url": { "raw": "{{baseUrl}}/api/runs/{{testRunId}}" }
+              },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"cm1run001\",\n  \"teamId\": \"cm1abc123\",\n  \"status\": \"PASSED\",\n  \"totalTests\": 3,\n  \"passed\": 3,\n  \"failed\": 0,\n  \"skipped\": 0,\n  \"duration\": 12345,\n  \"startedAt\": \"2026-02-21T00:00:00.000Z\",\n  \"finishedAt\": \"2026-02-21T00:00:12.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Finish Run (FAILED)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FAILED\",\n  \"duration\": 9800\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/{{testRunId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "runs", "{{testRunId}}"]
+            },
+            "description": "Finish a test run with FAILED status. Same behaviour as PASSED — counts are recomputed from DB.\n\n**WS event pushed:** `run:finished`"
+          }
+        },
+        {
+          "name": "Cancel Run",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CANCELLED\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/{{testRunId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "runs", "{{testRunId}}"]
+            },
+            "description": "Cancel a run mid-flight. `finishedAt` is set, existing result counts are kept.\n\n**WS event pushed:** `run:finished`"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Results",
+      "item": [
+        {
+          "name": "Create Result (PASSED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.id) pm.collectionVariables.set('testResultId', res.id);",
+                  "console.log('testResultId:', res.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"testRunId\": \"{{testRunId}}\",\n  \"testCaseId\": \"{{testCaseId}}\",\n  \"status\": \"PASSED\",\n  \"duration\": 1342,\n  \"retryCount\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/results",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "results"]
+            },
+            "description": "Report an individual test result.\n\n**Required:** `testRunId`, `testCaseId`, `status`\n**Optional:** `duration` (ms), `error` (string), `retryCount` (default 0)\n`status`: `PASSED` | `FAILED` | `SKIPPED` | `RETRIED`\n\n**WS events pushed:** always `result:new`; additionally `result:failed` when `status` is `FAILED`.\n\nAutomatically stores `testResultId`."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "x-api-key", "value": "{{apiKey}}" }
+                ],
+                "url": { "raw": "{{baseUrl}}/api/results" }
+              },
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"id\": \"cm1res001\",\n  \"testRunId\": \"cm1run001\",\n  \"testCaseId\": \"cm1tc001\",\n  \"status\": \"PASSED\",\n  \"duration\": 1342,\n  \"error\": null,\n  \"retryCount\": 0,\n  \"startedAt\": \"2026-02-21T00:00:00.000Z\",\n  \"finishedAt\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Result (FAILED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"testRunId\": \"{{testRunId}}\",\n  \"testCaseId\": \"{{testCaseId}}\",\n  \"status\": \"FAILED\",\n  \"duration\": 5000,\n  \"error\": \"Expected element to be visible but it was hidden\",\n  \"retryCount\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/results",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "results"]
+            },
+            "description": "Report a failed result with an error message and retry count.\n\n**WS events pushed:** `result:new` + `result:failed` (both fired for FAILED status)."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{baseUrl}}/api/results" }
+              },
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"id\": \"cm1res002\",\n  \"testRunId\": \"cm1run001\",\n  \"testCaseId\": \"cm1tc002\",\n  \"status\": \"FAILED\",\n  \"duration\": 5000,\n  \"error\": \"Expected element to be visible but it was hidden\",\n  \"retryCount\": 2,\n  \"startedAt\": \"2026-02-21T00:00:01.000Z\",\n  \"finishedAt\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Result (SKIPPED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"testRunId\": \"{{testRunId}}\",\n  \"testCaseId\": \"{{testCaseId}}\",\n  \"status\": \"SKIPPED\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/results",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "results"]
+            },
+            "description": "Report a skipped test. Only `result:new` is pushed (no `result:failed`)."
+          }
+        },
+        {
+          "name": "Update Result",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PASSED\",\n  \"duration\": 1500\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/results/{{testResultId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "results", "{{testResultId}}"]
+            },
+            "description": "Update a result's `status`, `duration`, `error`, or `retryCount`. All fields optional — only provided fields are changed.\n\nOwnership is verified: the result must belong to the authenticated team."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "url": { "raw": "{{baseUrl}}/api/results/{{testResultId}}" }
+              },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"cm1res001\",\n  \"status\": \"PASSED\",\n  \"duration\": 1500,\n  \"error\": null,\n  \"retryCount\": 0,\n  \"startedAt\": \"2026-02-21T00:00:00.000Z\",\n  \"finishedAt\": null\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "originalRequest": {
+                "method": "PATCH",
+                "url": { "raw": "{{baseUrl}}/api/results/{{testResultId}}" }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Result not found\",\n  \"statusCode\": 404\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Artifacts",
+      "item": [
+        {
+          "name": "Upload Artifact",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.id) pm.collectionVariables.set('artifactId', res.id);",
+                  "console.log('artifactId:', res.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "testResultId",
+                  "value": "{{testResultId}}",
+                  "type": "text",
+                  "description": "ID of the test result this artifact belongs to"
+                },
+                {
+                  "key": "type",
+                  "value": "SCREENSHOT",
+                  "type": "text",
+                  "description": "SCREENSHOT | VIDEO | TRACE | LOG"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Artifact file to upload (max 50 MB)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/artifacts/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "artifacts", "upload"]
+            },
+            "description": "Upload an artifact file for a test result using `multipart/form-data`.\n\n**Required fields:** `testResultId`, `type`, `file`\n`type`: `SCREENSHOT` | `VIDEO` | `TRACE` | `LOG`\n\nFile is stored in MinIO at `{teamId}/{testRunId}/{testResultId}/{filename}`. Max 50 MB.\n\n**WS event pushed:** `artifact:new`\n\nAutomatically stores `artifactId`."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+                "url": { "raw": "{{baseUrl}}/api/artifacts/upload" }
+              },
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"id\": \"cm1art001\",\n  \"testResultId\": \"cm1res001\",\n  \"type\": \"SCREENSHOT\",\n  \"fileName\": \"failure.png\",\n  \"fileUrl\": \"cm1abc123/cm1run001/cm1res001/failure.png\",\n  \"fileSize\": 48210,\n  \"createdAt\": \"2026-02-21T00:00:00.000Z\"\n}"
+            },
+            {
+              "name": "400 Bad Request — missing fields",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{baseUrl}}/api/artifacts/upload" }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"Missing required fields: testResultId, type, and file\",\n  \"statusCode\": 400\n}"
+            },
+            {
+              "name": "404 Not Found — test result missing",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{baseUrl}}/api/artifacts/upload" }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Test result not found\",\n  \"statusCode\": 404\n}"
+            }
+          ]
+        },
+        {
+          "name": "Download Artifact",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/artifacts/{{artifactId}}/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "artifacts", "{{artifactId}}", "download"]
+            },
+            "description": "Returns a **302 redirect** to a presigned MinIO URL valid for **1 hour**.\n\n- Postman follows the redirect by default and downloads the file directly.\n- To capture the raw redirect URL, disable **Follow redirects** in Settings → and read the `Location` response header."
+          },
+          "response": [
+            {
+              "name": "302 Redirect → presigned URL",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+                "url": { "raw": "{{baseUrl}}/api/artifacts/{{artifactId}}/download" }
+              },
+              "status": "Found",
+              "code": 302,
+              "header": [
+                {
+                  "key": "Location",
+                  "value": "http://localhost:9000/qc-artifacts/cm1abc123/cm1run001/cm1res001/failure.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&..."
+                }
+              ],
+              "body": ""
+            },
+            {
+              "name": "404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{baseUrl}}/api/artifacts/{{artifactId}}/download" }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Artifact not found\",\n  \"statusCode\": 404\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

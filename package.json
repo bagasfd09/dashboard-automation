@@ -1,0 +1,19 @@
+{
+  "name": "qc-monitor",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "db:push": "turbo db:push",
+    "db:generate": "turbo db:generate",
+    "test:integration": "tsx tests/integration/run.ts",
+    "publish:reporter": "pnpm --filter @bagasfd09/qc-monitor-reporter publish"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "tsx": "^4.19.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  }
+}
