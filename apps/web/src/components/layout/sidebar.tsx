@@ -9,6 +9,7 @@ import {
   Play,
   Settings,
   Activity,
+  RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +18,7 @@ const links = [
   { href: '/teams', label: 'Teams', icon: Users },
   { href: '/test-cases', label: 'Test Cases', icon: TestTube },
   { href: '/runs', label: 'Test Runs', icon: Play },
+  { href: '/retries', label: 'Retries', icon: RotateCcw },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 

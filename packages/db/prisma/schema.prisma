@@ -8,24 +8,27 @@ datasource db {
 }
 
 model Team {
-  id        String     @id @default(cuid())
-  name      String     @unique
-  apiKey    String     @unique @default(cuid())
-  testCases TestCase[]
-  testRuns  TestRun[]
-  createdAt DateTime   @default(now())
+  id            String         @id @default(cuid())
+  name          String         @unique
+  apiKey        String         @unique @default(cuid())
+  testCases     TestCase[]
+  testRuns      TestRun[]
+  retryRequests RetryRequest[]
+  createdAt     DateTime       @default(now())
 }
 
 model TestCase {
-  id        String       @id @default(cuid())
-  title     String
-  filePath  String
-  tags      String[]
-  teamId    String
-  team      Team         @relation(fields: [teamId], references: [id])
-  results   TestResult[]
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id            String         @id @default(cuid())
+  title         String
+  filePath      String
+  suiteName     String?
+  tags          String[]
+  teamId        String
+  team          Team           @relation(fields: [teamId], references: [id])
+  results       TestResult[]
+  retryRequests RetryRequest[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@unique([teamId, filePath, title])
 }
@@ -90,4 +93,24 @@ enum ArtifactType {
   VIDEO
   TRACE
   LOG
+}
+
+model RetryRequest {
+  id          String             @id @default(cuid())
+  teamId      String
+  team        Team               @relation(fields: [teamId], references: [id])
+  testCaseId  String
+  testCase    TestCase           @relation(fields: [testCaseId], references: [id])
+  status      RetryRequestStatus @default(PENDING)
+  requestedAt DateTime           @default(now())
+  pickedUpAt  DateTime?
+  completedAt DateTime?
+  resultId    String?
+}
+
+enum RetryRequestStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  EXPIRED
 }

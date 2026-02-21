@@ -11,6 +11,18 @@ export interface SyncTestCase {
   title: string;
   filePath: string;
   tags?: string[];
+  suiteName?: string;
+}
+
+export type RetryRequestStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'EXPIRED';
+
+export interface PendingRetry {
+  id: string;
+  teamId: string;
+  testCaseId: string;
+  testCase: { title: string; filePath: string };
+  status: RetryRequestStatus;
+  requestedAt: string;
 }
 
 export interface SyncedTestCase {
@@ -181,6 +193,33 @@ export class QCMonitorClient {
     } catch (err) {
       console.warn('[QC Monitor] Failed to report result:', err);
       return null;
+    }
+  }
+
+  /**
+   * Fetch all PENDING retry requests for this team (used by the watcher).
+   */
+  async getPendingRetries(): Promise<PendingRetry[]> {
+    try {
+      const res = await this.request<{ items: PendingRetry[] }>('GET', '/api/retry/pending');
+      return res.items;
+    } catch (err) {
+      console.warn('[QC Monitor] Failed to fetch pending retries:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Update the status of a retry request (used by the watcher).
+   */
+  async updateRetryStatus(
+    id: string,
+    body: { status: RetryRequestStatus; resultId?: string },
+  ): Promise<void> {
+    try {
+      await this.request('PATCH', `/api/retry/${id}`, body);
+    } catch (err) {
+      console.warn(`[QC Monitor] Failed to update retry ${id}:`, err);
     }
   }
 

@@ -15,6 +15,8 @@ import { runRoutes } from './routes/runs.js';
 import { resultRoutes } from './routes/results.js';
 import { artifactRoutes } from './routes/artifacts.js';
 import { adminRoutes } from './routes/admin.routes.js';
+import { retryRoutes } from './routes/retry.routes.js';
+import { expireOldRequests } from './services/retryService.js';
 
 const app = Fastify({
   logger: {
@@ -44,6 +46,10 @@ async function bootstrap() {
   await app.register(resultRoutes, { prefix: '/api/results' });
   await app.register(artifactRoutes, { prefix: '/api/artifacts' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
+  await app.register(retryRoutes, { prefix: '/api/retry' });
+
+  // Expire stale PENDING retry requests every minute
+  setInterval(() => void expireOldRequests(), 60_000);
 
   const port = parseInt(process.env.PORT ?? String(DEFAULT_PORT), 10);
 

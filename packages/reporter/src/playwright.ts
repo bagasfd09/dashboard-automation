@@ -52,6 +52,22 @@ function relativeFile(test: TestCase, cwd: string): string {
   return path.relative(cwd, test.location.file).replace(/\\/g, '/');
 }
 
+/**
+ * Walk the test's parent chain and collect describe-level suite titles.
+ * Returns them joined with " > " (e.g. "Auth > Login"), or undefined if no describes.
+ */
+function getSuiteName(test: TestCase): string | undefined {
+  const parts: string[] = [];
+  let node: Suite | undefined = test.parent;
+  while (node) {
+    if (node.type === 'describe' && node.title) {
+      parts.unshift(node.title);
+    }
+    node = node.parent;
+  }
+  return parts.length > 0 ? parts.join(' > ') : undefined;
+}
+
 // ─── Reporter ────────────────────────────────────────────────────────────────
 
 /**
@@ -121,6 +137,7 @@ export default class QCMonitorPlaywrightReporter implements Reporter {
         title: t.title,
         filePath: relativeFile(t, this.cwd),
         tags: [] as string[],
+        suiteName: getSuiteName(t),
       }))
       .filter(({ filePath, title }) => {
         const k = `${filePath}::${title}`;

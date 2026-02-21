@@ -8,7 +8,11 @@ export type {
   TestStatus,
   ArtifactType,
   RunStatus,
+  RetryRequestStatus,
+  PendingRetry,
 } from './core.js';
 
 export { loadConfig } from './config.js';
 export type { QCMonitorConfig } from './config.js';
+
+export { RetryWatcher } from './retry-watcher.js';

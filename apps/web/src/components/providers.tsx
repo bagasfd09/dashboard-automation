@@ -53,6 +53,13 @@ function WebSocketManager() {
         if (runId) queryClient.invalidateQueries({ queryKey: ['run', runId] });
         break;
       }
+
+      case 'retry:requested': {
+        queryClient.invalidateQueries({ queryKey: ['retries'] });
+        const testTitle = (d.title ?? d.testCaseId ?? 'test') as string;
+        toast.info(`${teamPrefix}Retry queued: ${testTitle}`);
+        break;
+      }
     }
   });
 

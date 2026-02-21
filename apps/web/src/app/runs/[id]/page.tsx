@@ -34,6 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
+import { RetryButton } from '@/components/RetryButton';
 import type { Artifact, TestStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -388,12 +389,13 @@ export default function RunDetailPage() {
                   <TableHead className="text-zinc-400">Retries</TableHead>
                   <TableHead className="text-zinc-400">Artifacts</TableHead>
                   <TableHead className="text-zinc-400">Error</TableHead>
+                  <TableHead className="text-zinc-400">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredResults.length === 0 ? (
                   <TableRow className="border-zinc-800">
-                    <TableCell colSpan={6} className="text-center text-zinc-500 py-10">
+                    <TableCell colSpan={7} className="text-center text-zinc-500 py-10">
                       No results match the current filter
                     </TableCell>
                   </TableRow>
@@ -443,6 +445,14 @@ export default function RunDetailPage() {
                             </button>
                           ) : (
                             <span className="text-zinc-600 text-xs">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {result.status === 'FAILED' && result.testCaseId && (
+                            <RetryButton
+                              testCaseId={result.testCaseId}
+                              teamId={run.teamId}
+                            />
                           )}
                         </TableCell>
                       </TableRow>

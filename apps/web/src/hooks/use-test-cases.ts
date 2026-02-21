@@ -14,6 +14,16 @@ export function useTestCases(filters: TestCaseFilters = {}, page = 1) {
   });
 }
 
+export function useGroupedTestCases(
+  groupBy: 'suite' | 'filePath' | 'tag' | 'team',
+  filters: TestCaseFilters = {},
+) {
+  return useQuery({
+    queryKey: ['test-cases-grouped', groupBy, filters],
+    queryFn: () => api.getTestCasesGrouped({ ...filters, groupBy }),
+  });
+}
+
 export function useTestCase(id: string) {
   return useQuery({
     queryKey: ['test-case', id],

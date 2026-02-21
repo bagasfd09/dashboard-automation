@@ -13,11 +13,44 @@ export interface TestCase {
   id: string;
   title: string;
   filePath: string;
+  suiteName?: string;
   tags: string[];
   teamId: string;
   createdAt: string;
   updatedAt: string;
   team?: { id: string; name: string };
+}
+
+export interface TestCaseGroupStats {
+  total: number;
+  passed: number;
+  failed: number;
+  passRate: number;
+}
+
+export interface TestCaseGroup {
+  name: string;
+  testCases: TestCase[];
+  stats: TestCaseGroupStats;
+}
+
+export interface GroupedTestCases {
+  groups: TestCaseGroup[];
+}
+
+export type RetryRequestStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'EXPIRED';
+
+export interface RetryRequest {
+  id: string;
+  teamId: string;
+  testCaseId: string;
+  status: RetryRequestStatus;
+  requestedAt: string;
+  pickedUpAt?: string;
+  completedAt?: string;
+  resultId?: string;
+  testCase: { title: string; filePath: string };
+  team: { name: string };
 }
 
 export interface Artifact {

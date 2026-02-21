@@ -27,6 +27,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RetryButton } from '@/components/RetryButton';
 import { api } from '@/lib/api';
 import type { Artifact, TestStatus } from '@/lib/types';
 
@@ -177,6 +178,7 @@ export default function TestCaseDetailPage() {
                 <TableHead className="text-zinc-400">Retries</TableHead>
                 <TableHead className="text-zinc-400">Error</TableHead>
                 <TableHead className="text-zinc-400">Artifacts</TableHead>
+                <TableHead className="text-zinc-400">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -208,11 +210,16 @@ export default function TestCaseDetailPage() {
                       ))}
                     </div>
                   </TableCell>
+                  <TableCell>
+                    {result.status === 'FAILED' && (
+                      <RetryButton testCaseId={data.id} teamId={data.teamId} />
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
               {sortedResults.length === 0 && (
                 <TableRow className="border-zinc-800">
-                  <TableCell colSpan={6} className="text-center text-zinc-500 py-8">
+                  <TableCell colSpan={7} className="text-center text-zinc-500 py-8">
                     No run history yet
                   </TableCell>
                 </TableRow>

@@ -7,6 +7,8 @@ import type {
   TeamSummary,
   TeamDetailStats,
   OverviewStats,
+  GroupedTestCases,
+  RetryRequest,
 } from './types';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -53,8 +55,23 @@ export const api = {
     page?: number;
     limit?: number;
   }) => apiFetch<Paginated<TestCase>>(`/api/admin/test-cases?${qs(p)}`),
+  getTestCasesGrouped: (p: {
+    search?: string;
+    tag?: string;
+    teamId?: string;
+    groupBy: 'suite' | 'filePath' | 'tag' | 'team';
+  }) => apiFetch<GroupedTestCases>(`/api/admin/test-cases?${qs(p)}`),
   getTestCase: (id: string) =>
     apiFetch<TestCaseDetail>(`/api/admin/test-cases/${id}`),
+
+  // ── Retries ───────────────────────────────────────────────────────────────
+  requestRetry: (testCaseId: string, teamId: string) =>
+    apiFetch<RetryRequest>('/api/admin/retry', {
+      method: 'POST',
+      body: JSON.stringify({ testCaseId, teamId }),
+    }),
+  getRetries: (p: { teamId?: string; page?: number; limit?: number }) =>
+    apiFetch<Paginated<RetryRequest>>(`/api/admin/retries?${qs(p)}`),
 
   // ── Runs ──────────────────────────────────────────────────────────────────
   getRuns: (p: { page?: number; limit?: number; teamId?: string }) =>

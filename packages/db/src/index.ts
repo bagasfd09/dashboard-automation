@@ -19,6 +19,7 @@ export type {
   TestRun,
   TestResult,
   Artifact,
+  RetryRequest,
   Prisma,
 } from '@prisma/client';
-export { RunStatus, TestStatus, ArtifactType } from '@prisma/client';
+export { RunStatus, TestStatus, ArtifactType, RetryRequestStatus } from '@prisma/client';

@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     playwright: 'src/playwright.ts',
+    cli: 'src/cli.ts',
   },
   format: ['cjs', 'esm'],
   dts: true,

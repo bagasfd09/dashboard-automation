@@ -3,6 +3,8 @@ import { adminAuth } from '../middleware/admin.middleware.js';
 import * as adminService from '../services/adminService.js';
 import * as testCaseService from '../services/testCaseService.js';
 import * as runService from '../services/runService.js';
+import * as retryService from '../services/retryService.js';
+import { eventService } from '../services/eventService.js';
 import type { TestStatus } from '@qc-monitor/db';
 
 export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
@@ -76,6 +78,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
             search: { type: 'string' },
             page: { type: 'integer', minimum: 1, default: 1 },
             limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+            groupBy: { type: 'string', enum: ['suite', 'filePath', 'tag', 'team'] },
           },
         },
       },
@@ -88,6 +91,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         search?: string;
         page?: number;
         limit?: number;
+        groupBy?: 'suite' | 'filePath' | 'tag' | 'team';
       };
       try {
         // Pass teamId as the scoping param; undefined = all teams
@@ -97,6 +101,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           search: q.search,
           page: q.page,
           limit: q.limit,
+          groupBy: q.groupBy,
         });
         return reply.send(result);
       } catch (err) {
@@ -184,6 +189,72 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         const run = await runService.getRun(id, undefined);
         if (!run) return reply.code(404).send({ error: 'Run not found', statusCode: 404 });
         return reply.send(run);
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ error: 'Internal server error', statusCode: 500 });
+      }
+    },
+  );
+
+  // ── Retry requests ──────────────────────────────────────────────────────
+
+  /** POST /api/admin/retry — create a retry request for a failed test */
+  fastify.post(
+    '/retry',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['testCaseId', 'teamId'],
+          properties: {
+            testCaseId: { type: 'string' },
+            teamId: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { testCaseId, teamId } = request.body as { testCaseId: string; teamId: string };
+      try {
+        const retry = await retryService.createRetryRequest(teamId, testCaseId);
+        // Broadcast event to the team's watcher
+        eventService.broadcast(teamId, 'retry:requested', {
+          id: retry.id,
+          testCaseId,
+          teamId,
+        });
+        return reply.code(201).send(retry);
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ error: 'Internal server error', statusCode: 500 });
+      }
+    },
+  );
+
+  /** GET /api/admin/retries — list retry requests */
+  fastify.get(
+    '/retries',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            teamId: { type: 'string' },
+            page: { type: 'integer', minimum: 1, default: 1 },
+            limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { teamId, page, limit } = request.query as {
+        teamId?: string;
+        page?: number;
+        limit?: number;
+      };
+      try {
+        const result = await retryService.listRetries({ teamId, page, limit });
+        return reply.send(result);
       } catch (err) {
         fastify.log.error(err);
         return reply.code(500).send({ error: 'Internal server error', statusCode: 500 });
