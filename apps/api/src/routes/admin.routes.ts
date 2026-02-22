@@ -77,7 +77,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
             tag: { type: 'string' },
             search: { type: 'string' },
             page: { type: 'integer', minimum: 1, default: 1 },
-            limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+            pageSize: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
             groupBy: { type: 'string', enum: ['suite', 'filePath', 'tag', 'team'] },
           },
         },
@@ -90,7 +90,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         tag?: string;
         search?: string;
         page?: number;
-        limit?: number;
+        pageSize?: number;
         groupBy?: 'suite' | 'filePath' | 'tag' | 'team';
       };
       try {
@@ -100,7 +100,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           tag: q.tag,
           search: q.search,
           page: q.page,
-          limit: q.limit,
+          pageSize: q.pageSize,
           groupBy: q.groupBy,
         });
         return reply.send(result);
@@ -149,19 +149,19 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           properties: {
             teamId: { type: 'string' },
             page: { type: 'integer', minimum: 1, default: 1 },
-            limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+            pageSize: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
           },
         },
       },
     },
     async (request, reply) => {
-      const { teamId, page, limit } = request.query as {
+      const { teamId, page, pageSize } = request.query as {
         teamId?: string;
         page?: number;
-        limit?: number;
+        pageSize?: number;
       };
       try {
-        const result = await runService.listRuns(teamId, page, limit);
+        const result = await runService.listRuns(teamId, page, pageSize);
         return reply.send(result);
       } catch (err) {
         fastify.log.error(err);
@@ -241,19 +241,19 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           properties: {
             teamId: { type: 'string' },
             page: { type: 'integer', minimum: 1, default: 1 },
-            limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+            pageSize: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
           },
         },
       },
     },
     async (request, reply) => {
-      const { teamId, page, limit } = request.query as {
+      const { teamId, page, pageSize } = request.query as {
         teamId?: string;
         page?: number;
-        limit?: number;
+        pageSize?: number;
       };
       try {
-        const result = await retryService.listRetries({ teamId, page, limit });
+        const result = await retryService.listRetries({ teamId, page, pageSize });
         return reply.send(result);
       } catch (err) {
         fastify.log.error(err);

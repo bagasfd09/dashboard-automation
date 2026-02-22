@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
 export interface TestCaseFilters {
@@ -7,11 +7,26 @@ export interface TestCaseFilters {
   teamId?: string;
 }
 
-export function useTestCases(filters: TestCaseFilters = {}, page = 1) {
-  return useQuery({
-    queryKey: ['test-cases', filters, page],
-    queryFn: () => api.getTestCases({ ...filters, page, limit: 20 }),
+export function useTestCases(filters: TestCaseFilters = {}, page = 1, pageSize = 20) {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['test-cases', filters, page, pageSize],
+    queryFn: () => api.getTestCases({ ...filters, page, pageSize }),
   });
+
+  function prefetchNext() {
+    if (!query.data) return;
+    const { totalPages } = query.data.pagination;
+    if (page < totalPages) {
+      void queryClient.prefetchQuery({
+        queryKey: ['test-cases', filters, page + 1, pageSize],
+        queryFn: () => api.getTestCases({ ...filters, page: page + 1, pageSize }),
+      });
+    }
+  }
+
+  return { ...query, prefetchNext };
 }
 
 export function useGroupedTestCases(

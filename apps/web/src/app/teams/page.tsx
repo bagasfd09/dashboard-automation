@@ -1,8 +1,10 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTeams } from '@/hooks/use-teams';
 import { StatusBadge } from '@/components/status-badge';
+import { Pagination } from '@/components/Pagination';
 import {
   Card,
   CardContent,
@@ -27,9 +29,32 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleString();
 }
 
-export default function TeamsPage() {
+function TeamsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const page = Number(searchParams.get('page') ?? '1');
+  const pageSize = Number(searchParams.get('pageSize') ?? '20');
+
   const { data: teams, isLoading } = useTeams();
+
+  // Client-side slice for pagination
+  const totalItems = teams?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const pagedTeams = teams?.slice((page - 1) * pageSize, page * pageSize) ?? [];
+
+  function onPageChange(p: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', String(p));
+    router.push(`/teams?${params.toString()}`);
+  }
+
+  function onPageSizeChange(ps: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('pageSize', String(ps));
+    params.set('page', '1');
+    router.push(`/teams?${params.toString()}`);
+  }
 
   return (
     <div className="space-y-6">
@@ -67,7 +92,7 @@ export default function TeamsPage() {
                       ))}
                     </TableRow>
                   ))
-                : teams?.map((team) => (
+                : pagedTeams.map((team) => (
                     <TableRow
                       key={team.id}
                       className="border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
@@ -115,7 +140,7 @@ export default function TeamsPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-              {!isLoading && teams?.length === 0 && (
+              {!isLoading && pagedTeams.length === 0 && (
                 <TableRow className="border-zinc-800">
                   <TableCell colSpan={6} className="text-center text-zinc-500 py-12">
                     <p className="font-medium">No teams yet</p>
@@ -127,6 +152,34 @@ export default function TeamsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {totalItems > pageSize && (
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
     </div>
+  );
+}
+
+function TeamsPageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-24 bg-zinc-800" />
+      <Skeleton className="h-64 bg-zinc-800 rounded-lg" />
+    </div>
+  );
+}
+
+export default function TeamsPage() {
+  return (
+    <Suspense fallback={<TeamsPageSkeleton />}>
+      <TeamsPageContent />
+    </Suspense>
   );
 }

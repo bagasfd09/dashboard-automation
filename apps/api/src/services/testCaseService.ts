@@ -8,15 +8,20 @@ interface ListFilters {
   tag?: string;
   search?: string;
   page?: number;
-  limit?: number;
+  pageSize?: number;
   groupBy?: 'suite' | 'filePath' | 'tag' | 'team';
 }
 
-interface PaginatedResult<T> {
-  items: T[];
-  total: number;
+interface PaginationMeta {
   page: number;
-  limit: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+interface PaginatedResult<T> {
+  data: T[];
+  pagination: PaginationMeta;
 }
 
 type TestCaseWithTeam = TestCase & { team: { id: string; name: string } };
@@ -48,7 +53,7 @@ export async function listTestCases(
   teamId: string | undefined,
   filters: ListFilters = {},
 ): Promise<PaginatedResult<TestCaseWithTeam> | GroupedTestCasesResult> {
-  const { status, tag, search, page = 1, limit = 20, groupBy } = filters;
+  const { status, tag, search, page = 1, pageSize = 20, groupBy } = filters;
 
   const where: Record<string, unknown> = teamId ? { teamId } : {};
 
@@ -134,20 +139,23 @@ export async function listTestCases(
 
   // ── Flat paginated mode ──────────────────────────────────────────────────────
 
-  const skip = (page - 1) * limit;
+  const skip = (page - 1) * pageSize;
 
-  const [rawItems, total] = await Promise.all([
+  const [rawItems, totalItems] = await Promise.all([
     prisma.testCase.findMany({
       where,
       skip,
-      take: limit,
+      take: pageSize,
       orderBy: { createdAt: 'desc' },
       include: { team: { select: { id: true, name: true } } },
     }),
     prisma.testCase.count({ where }),
   ]);
 
-  return { items: rawItems as TestCaseWithTeam[], total, page, limit };
+  return {
+    data: rawItems as TestCaseWithTeam[],
+    pagination: { page, pageSize, totalItems, totalPages: Math.ceil(totalItems / pageSize) },
+  };
 }
 
 // ── Get single ────────────────────────────────────────────────────────────────

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { useTestCases, useGroupedTestCases, type TestCaseFilters } from '@/hooks/use-test-cases';
 import { useTeams } from '@/hooks/use-teams';
+import { Pagination } from '@/components/Pagination';
 import {
   Card,
   CardContent,
@@ -99,13 +100,6 @@ function GroupAccordion({
         ? 'bg-green-500'
         : 'bg-zinc-600',
   );
-
-  // Collect failing test cases for "Retry All Failed"
-  const failedTCs = group.testCases.filter((tc) => {
-    // We don't have per-tc status in grouped view, but groups with failed>0 have failures.
-    // We just show the button at the group level.
-    return stats.failed > 0;
-  });
 
   async function retryAllFailed() {
     for (const tc of group.testCases) {
@@ -261,18 +255,25 @@ function GroupedView({
   );
 }
 
-// ── Flat view (existing table) ───────────────────────────────────────────────
+// ── Flat view ─────────────────────────────────────────────────────────────────
 
 function FlatView({
   filters,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
   onNavigate,
 }: {
   filters: TestCaseFilters;
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (ps: number) => void;
   onNavigate: (id: string) => void;
 }) {
-  const [page, setPage] = useState(1);
-  const { data, isLoading } = useTestCases(filters, page);
-  const totalPages = data ? Math.ceil(data.total / data.limit) : 1;
+  const { data, isLoading, prefetchNext } = useTestCases(filters, page, pageSize);
+  const prefetchNextStable = useCallback(prefetchNext, [prefetchNext]);
 
   return (
     <>
@@ -281,7 +282,9 @@ function FlatView({
           <CardTitle className="text-white text-base">
             Test Cases
             {data && (
-              <span className="ml-2 text-zinc-500 font-normal text-sm">({data.total} total)</span>
+              <span className="ml-2 text-zinc-500 font-normal text-sm">
+                ({data.pagination.totalItems} total)
+              </span>
             )}
           </CardTitle>
         </CardHeader>
@@ -308,7 +311,7 @@ function FlatView({
                       ))}
                     </TableRow>
                   ))
-                : data?.items.map((tc: TestCase) => (
+                : data?.data.map((tc: TestCase) => (
                     <TableRow
                       key={tc.id}
                       className="border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
@@ -357,7 +360,7 @@ function FlatView({
                       </TableCell>
                     </TableRow>
                   ))}
-              {!isLoading && data?.items.length === 0 && (
+              {!isLoading && data?.data.length === 0 && (
                 <TableRow className="border-zinc-800">
                   <TableCell colSpan={6} className="text-center text-zinc-500 py-8">
                     No test cases found
@@ -369,30 +372,16 @@ function FlatView({
         </CardContent>
       </Card>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-          >
-            Previous
-          </Button>
-          <span className="text-zinc-400 text-sm">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-          >
-            Next
-          </Button>
-        </div>
+      {data && (
+        <Pagination
+          currentPage={data.pagination.page}
+          totalPages={data.pagination.totalPages}
+          totalItems={data.pagination.totalItems}
+          pageSize={data.pagination.pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          onPrefetchNext={prefetchNextStable}
+        />
       )}
     </>
   );
@@ -400,24 +389,33 @@ function FlatView({
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function TestCasesPage() {
+function TestCasesPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const page = Number(searchParams.get('page') ?? '1');
+  const pageSize = Number(searchParams.get('pageSize') ?? '20');
+  const groupByParam = (searchParams.get('groupBy') as GroupByOption | null) ?? null;
+
+  // groupBy: prefer URL param, fall back to localStorage, default 'suite'
+  const [groupBy, setGroupBy] = useState<GroupByOption>(() => {
+    if (groupByParam) return groupByParam;
+    if (typeof window === 'undefined') return 'suite';
+    return (localStorage.getItem('tc-groupBy') as GroupByOption) ?? 'suite';
+  });
+
+  // Sync groupBy state when URL param changes
+  useEffect(() => {
+    if (groupByParam && groupByParam !== groupBy) {
+      setGroupBy(groupByParam);
+    }
+  }, [groupByParam]);
+
   const [filters, setFilters] = useState<TestCaseFilters>({});
   const [searchInput, setSearchInput] = useState('');
   const [tagInput, setTagInput] = useState('');
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tagTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Persist groupBy to localStorage
-  const [groupBy, setGroupBy] = useState<GroupByOption>(() => {
-    if (typeof window === 'undefined') return 'suite';
-    return (localStorage.getItem('tc-groupBy') as GroupByOption) ?? 'suite';
-  });
-
-  function handleGroupByChange(value: GroupByOption) {
-    setGroupBy(value);
-    if (typeof window !== 'undefined') localStorage.setItem('tc-groupBy', value);
-  }
 
   const { data: teams } = useTeams();
 
@@ -426,6 +424,10 @@ export default function TestCasesPage() {
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => {
       setFilters((f) => ({ ...f, search: searchInput || undefined }));
+      // Reset page on filter change
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('page', '1');
+      router.replace(`/test-cases?${params.toString()}`);
     }, 300);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
   }, [searchInput]);
@@ -435,12 +437,40 @@ export default function TestCasesPage() {
     if (tagTimer.current) clearTimeout(tagTimer.current);
     tagTimer.current = setTimeout(() => {
       setFilters((f) => ({ ...f, tag: tagInput || undefined }));
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('page', '1');
+      router.replace(`/test-cases?${params.toString()}`);
     }, 300);
     return () => { if (tagTimer.current) clearTimeout(tagTimer.current); };
   }, [tagInput]);
 
   function onTeamChange(value: string) {
     setFilters((f) => ({ ...f, teamId: value === 'all' ? undefined : value }));
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', '1');
+    router.replace(`/test-cases?${params.toString()}`);
+  }
+
+  function handleGroupByChange(value: GroupByOption) {
+    setGroupBy(value);
+    if (typeof window !== 'undefined') localStorage.setItem('tc-groupBy', value);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('groupBy', value);
+    params.set('page', '1');
+    router.push(`/test-cases?${params.toString()}`);
+  }
+
+  function onPageChange(p: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', String(p));
+    router.push(`/test-cases?${params.toString()}`);
+  }
+
+  function onPageSizeChange(ps: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('pageSize', String(ps));
+    params.set('page', '1');
+    router.push(`/test-cases?${params.toString()}`);
   }
 
   function navigateToTestCase(id: string) {
@@ -503,7 +533,14 @@ export default function TestCasesPage() {
 
       {/* Content */}
       {groupBy === 'none' ? (
-        <FlatView filters={filters} onNavigate={navigateToTestCase} />
+        <FlatView
+          filters={filters}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          onNavigate={navigateToTestCase}
+        />
       ) : (
         <GroupedView
           groupBy={groupBy}
@@ -512,5 +549,27 @@ export default function TestCasesPage() {
         />
       )}
     </div>
+  );
+}
+
+function TestCasesPageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-40 bg-zinc-800" />
+      <div className="flex gap-3">
+        <Skeleton className="h-10 w-52 bg-zinc-800" />
+        <Skeleton className="h-10 w-40 bg-zinc-800" />
+        <Skeleton className="h-10 w-44 bg-zinc-800" />
+      </div>
+      <Skeleton className="h-64 bg-zinc-800 rounded-lg" />
+    </div>
+  );
+}
+
+export default function TestCasesPage() {
+  return (
+    <Suspense fallback={<TestCasesPageSkeleton />}>
+      <TestCasesPageContent />
+    </Suspense>
   );
 }

@@ -2,11 +2,16 @@ export type RunStatus = 'RUNNING' | 'PASSED' | 'FAILED' | 'CANCELLED';
 export type TestStatus = 'PASSED' | 'FAILED' | 'SKIPPED' | 'RETRIED';
 export type ArtifactType = 'SCREENSHOT' | 'VIDEO' | 'TRACE' | 'LOG';
 
-export interface Paginated<T> {
-  items: T[];
-  total: number;
+export interface PaginationMeta {
   page: number;
-  limit: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface Paginated<T> {
+  data: T[];
+  pagination: PaginationMeta;
 }
 
 export interface TestCase {

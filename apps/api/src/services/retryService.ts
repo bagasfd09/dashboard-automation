@@ -57,17 +57,20 @@ export async function updateRetryRequest(
 export async function listRetries(params: {
   teamId?: string;
   page?: number;
-  limit?: number;
-}): Promise<{ items: RetryRequestWithDetails[]; total: number; page: number; limit: number }> {
-  const { teamId, page = 1, limit = 20 } = params;
-  const skip = (page - 1) * limit;
+  pageSize?: number;
+}): Promise<{
+  data: RetryRequestWithDetails[];
+  pagination: { page: number; pageSize: number; totalItems: number; totalPages: number };
+}> {
+  const { teamId, page = 1, pageSize = 20 } = params;
+  const skip = (page - 1) * pageSize;
   const where = teamId ? { teamId } : {};
 
-  const [items, total] = await Promise.all([
+  const [items, totalItems] = await Promise.all([
     prisma.retryRequest.findMany({
       where,
       skip,
-      take: limit,
+      take: pageSize,
       orderBy: { requestedAt: 'desc' },
       include: {
         testCase: { select: { title: true, filePath: true } },
@@ -77,7 +80,10 @@ export async function listRetries(params: {
     prisma.retryRequest.count({ where }),
   ]);
 
-  return { items: items as RetryRequestWithDetails[], total, page, limit };
+  return {
+    data: items as RetryRequestWithDetails[],
+    pagination: { page, pageSize, totalItems, totalPages: Math.ceil(totalItems / pageSize) },
+  };
 }
 
 export async function expireOldRequests(): Promise<void> {

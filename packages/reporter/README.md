@@ -1,6 +1,6 @@
 # @bagasfd09/qc-monitor-reporter
 
-Playwright reporter for [QC Monitor](https://github.com/bagasfd09/dashboard-automation). Automatically syncs test cases, streams live results, and uploads screenshots / videos / traces to your dashboard.
+Playwright reporter for [QC Monitor](https://github.com/bagasfd09/dashboard-automation). Automatically syncs test cases (including `test.describe()` suite hierarchy), streams live results, uploads screenshots / videos / traces to your dashboard, and provides a watcher CLI for retrying failed tests on demand.
 
 ## Requirements
 
@@ -148,11 +148,66 @@ Config priority (highest → lowest): **inline options → env vars → config f
 
 | Lifecycle hook | What happens |
 |---|---|
-| `onBegin` | Collects all test titles + file paths, calls `POST /api/test-cases/sync` (idempotent upsert), then `POST /api/runs` to start a new run |
+| `onBegin` | Collects all test titles, file paths, and `test.describe()` suite names. Calls `POST /api/test-cases/sync` (idempotent upsert, saves `suiteName`), then `POST /api/runs` to start a new run — both in parallel |
 | `onTestEnd` | Maps Playwright status → `PASSED / FAILED / SKIPPED`, calls `POST /api/results`. On failure also uploads screenshots, videos, and traces via `POST /api/artifacts/upload` |
 | `onEnd` | Calls `PATCH /api/runs/:id` to mark the run finished with final counts and duration |
 
 All API calls fail silently with a `console.warn` — they never cause your test run to fail.
+
+### Suite name capture
+
+The reporter walks each test's `parent` chain to collect `test.describe()` block titles and joins them with ` > `. For example:
+
+```ts
+test.describe('Auth', () => {
+  test.describe('Login', () => {
+    test('should log in with valid credentials', async ({ page }) => { ... });
+  });
+});
+```
+
+This test is synced with `suiteName: "Auth > Login"`. Tests without any describe block have `suiteName: null` and appear under `(no suite)` in the grouped dashboard view.
+
+---
+
+## Retry Watcher
+
+The retry watcher is a long-lived CLI process that polls the API for PENDING retry requests (queued from the dashboard) and triggers Playwright to re-run the affected test.
+
+### Starting the watcher
+
+```bash
+# via the package bin
+npx qc-monitor-watch
+
+# or via a package.json script (recommended)
+# package.json: "watch": "npx qc-monitor-watch"
+npm run watch
+```
+
+The watcher reads the same `qc-monitor.config.js` / environment variables as the reporter — no extra configuration is needed.
+
+### What it does
+
+```
+1. Every 30 seconds: GET /api/retry/pending
+2. For each PENDING request:
+   a. PATCH /api/retry/:id  { status: "RUNNING" }
+   b. npx playwright test --grep "<test title>" --retries 0
+   c. PATCH /api/retry/:id  { status: "COMPLETED" }
+3. The new result appears in the dashboard automatically via WebSocket
+```
+
+Requests not picked up within **10 minutes** are automatically expired by the API.
+
+### Watcher status flow
+
+| Status | Meaning |
+|--------|---------|
+| `PENDING` | Queued from the dashboard, not yet picked up |
+| `RUNNING` | Watcher has started the Playwright process |
+| `COMPLETED` | Playwright finished — check Test Runs for the result |
+| `EXPIRED` | Not picked up within 10 minutes |
 
 ---
 
@@ -186,6 +241,20 @@ if (runId) {
 }
 ```
 
+### Retry watcher programmatic API
+
+```ts
+import { QCMonitorClient, RetryWatcher } from '@bagasfd09/qc-monitor-reporter';
+
+const client = new QCMonitorClient({ apiUrl: '...', apiKey: '...' });
+const watcher = new RetryWatcher(client, 30_000); // poll every 30s
+
+watcher.start();
+
+// Stop on shutdown
+process.on('SIGINT', () => { watcher.stop(); process.exit(0); });
+```
+
 ---
 
 ## Real-time dashboard
@@ -196,7 +265,7 @@ Connect a WebSocket to stream live results as tests run:
 ws://localhost:3001/ws?apiKey=cld_abc123...
 ```
 
-Events: `connected`, `run:started`, `run:finished`, `result:new`, `result:failed`, `artifact:new`
+Events: `connected`, `run:started`, `run:finished`, `result:new`, `result:failed`, `artifact:new`, `retry:requested`
 
 Each event has the shape `{ event: string, data: object, timestamp: string }`.
 

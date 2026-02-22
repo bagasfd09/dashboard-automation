@@ -2,11 +2,16 @@ import { prisma } from '@qc-monitor/db';
 import type { TestRun, RunStatus } from '@qc-monitor/db';
 import { eventService } from './eventService.js';
 
-interface PaginatedResult<T> {
-  items: T[];
-  total: number;
+interface PaginationMeta {
   page: number;
-  limit: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+interface PaginatedResult<T> {
+  data: T[];
+  pagination: PaginationMeta;
 }
 
 type TestRunWithTeam = TestRun & { team: { id: string; name: string } };
@@ -62,21 +67,24 @@ export async function updateRun(
 export async function listRuns(
   teamId: string | undefined,
   page = 1,
-  limit = 20,
+  pageSize = 20,
 ): Promise<PaginatedResult<TestRunWithTeam>> {
-  const skip = (page - 1) * limit;
+  const skip = (page - 1) * pageSize;
   const where = teamId ? { teamId } : {};
-  const [items, total] = await Promise.all([
+  const [items, totalItems] = await Promise.all([
     prisma.testRun.findMany({
       where,
       skip,
-      take: limit,
+      take: pageSize,
       orderBy: { startedAt: 'desc' },
       include: { team: { select: { id: true, name: true } } },
     }),
     prisma.testRun.count({ where }),
   ]);
-  return { items: items as TestRunWithTeam[], total, page, limit };
+  return {
+    data: items as TestRunWithTeam[],
+    pagination: { page, pageSize, totalItems, totalPages: Math.ceil(totalItems / pageSize) },
+  };
 }
 
 export async function getRun(id: string, teamId: string | undefined): Promise<unknown> {

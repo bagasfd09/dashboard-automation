@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback } from 'react';
 import { useRuns } from '@/hooks/use-runs';
 import { useTeams } from '@/hooks/use-teams';
 import { StatusBadge } from '@/components/status-badge';
+import { Pagination } from '@/components/Pagination';
 import {
   Card,
   CardContent,
@@ -26,7 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { teamColorClass } from '@/lib/team-colors';
 import { cn } from '@/lib/utils';
@@ -55,32 +56,63 @@ function RunProgressBar({ passed, failed, total }: { passed: number; failed: num
   );
 }
 
-export default function RunsPage() {
+function RunsPageContent() {
   const router = useRouter();
-  const [page, setPage] = useState(1);
-  const [teamId, setTeamId] = useState<string | undefined>();
-  const { data, isLoading } = useRuns(page, teamId);
-  const { data: teams } = useTeams();
+  const searchParams = useSearchParams();
 
-  const totalPages = data ? Math.ceil(data.total / data.limit) : 1;
+  const page = Number(searchParams.get('page') ?? '1');
+  const pageSize = Number(searchParams.get('pageSize') ?? '20');
+  const teamId = searchParams.get('teamId') ?? undefined;
+
+  function setParam(key: string, value: string | undefined) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === undefined || value === '') {
+      params.delete(key);
+    } else {
+      params.set(key, value);
+    }
+    router.push(`/runs?${params.toString()}`);
+  }
+
+  function onPageChange(p: number) {
+    setParam('page', String(p));
+  }
+
+  function onPageSizeChange(ps: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('pageSize', String(ps));
+    params.set('page', '1');
+    router.push(`/runs?${params.toString()}`);
+  }
 
   function onTeamChange(value: string) {
-    setTeamId(value === 'all' ? undefined : value);
-    setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === 'all') {
+      params.delete('teamId');
+    } else {
+      params.set('teamId', value);
+    }
+    params.set('page', '1');
+    router.push(`/runs?${params.toString()}`);
   }
+
+  const { data, isLoading, prefetchNext } = useRuns(page, pageSize, teamId);
+  const { data: teams } = useTeams();
+
+  const prefetchNextStable = useCallback(prefetchNext, [prefetchNext]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Test Runs</h1>
         <p className="text-zinc-400 text-sm mt-1">
-          {data ? `${data.total} total runs` : 'Loading…'}
+          {data ? `${data.pagination.totalItems} total runs` : 'Loading…'}
         </p>
       </div>
 
       {/* Team filter */}
       <div className="flex gap-3">
-        <Select onValueChange={onTeamChange} defaultValue="all">
+        <Select onValueChange={onTeamChange} value={teamId ?? 'all'}>
           <SelectTrigger className="w-44 bg-zinc-900 border-zinc-700 text-zinc-100">
             <SelectValue placeholder="All teams" />
           </SelectTrigger>
@@ -116,7 +148,7 @@ export default function RunsPage() {
             </TableHeader>
             <TableBody>
               {isLoading
-                ? Array.from({ length: 10 }).map((_, i) => (
+                ? Array.from({ length: pageSize > 10 ? 10 : pageSize }).map((_, i) => (
                     <TableRow key={i} className="border-zinc-800">
                       {Array.from({ length: 9 }).map((_, j) => (
                         <TableCell key={j}>
@@ -125,7 +157,7 @@ export default function RunsPage() {
                       ))}
                     </TableRow>
                   ))
-                : data?.items.map((run) => (
+                : data?.data.map((run) => (
                     <TableRow
                       key={run.id}
                       className="border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
@@ -172,7 +204,7 @@ export default function RunsPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-              {!isLoading && data?.items.length === 0 && (
+              {!isLoading && data?.data.length === 0 && (
                 <TableRow className="border-zinc-800">
                   <TableCell colSpan={9} className="text-center text-zinc-500 py-12">
                     <div className="space-y-1">
@@ -187,32 +219,35 @@ export default function RunsPage() {
         </CardContent>
       </Card>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-          >
-            Previous
-          </Button>
-          <span className="text-zinc-400 text-sm">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-          >
-            Next
-          </Button>
-        </div>
+      {data && (
+        <Pagination
+          currentPage={data.pagination.page}
+          totalPages={data.pagination.totalPages}
+          totalItems={data.pagination.totalItems}
+          pageSize={data.pagination.pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          onPrefetchNext={prefetchNextStable}
+        />
       )}
     </div>
+  );
+}
+
+function RunsPageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-32 bg-zinc-800" />
+      <Skeleton className="h-10 w-44 bg-zinc-800" />
+      <Skeleton className="h-64 bg-zinc-800 rounded-lg" />
+    </div>
+  );
+}
+
+export default function RunsPage() {
+  return (
+    <Suspense fallback={<RunsPageSkeleton />}>
+      <RunsPageContent />
+    </Suspense>
   );
 }

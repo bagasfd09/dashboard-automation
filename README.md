@@ -8,9 +8,11 @@ A full-stack test automation monitoring platform. Connect your Playwright test s
 
 - **Playwright Reporter SDK** — Drop-in reporter (`@bagasfd09/qc-monitor-reporter`) that auto-syncs test cases, streams results, and uploads artifacts on failure
 - **Real-time Dashboard** — Next.js admin UI showing live run progress via WebSocket, with per-team and cross-team views
+- **Test Case Grouping** — Group test cases by suite (`test.describe`), file path, tag, or team — with pass-rate bars and per-group stats in a collapsible accordion
+- **Retry from Dashboard** — Request a re-run of any failed test directly from the UI; a local watcher CLI picks it up and triggers Playwright automatically
 - **Multi-team Support** — Each QA team gets an isolated API key; the admin layer gives a unified view across all teams
 - **Artifact Storage** — Screenshots, videos, and Playwright traces are uploaded to MinIO (S3-compatible) and served via presigned URLs
-- **WebSocket Live Updates** — Events streamed as tests run: `run:started`, `result:new`, `result:failed`, `run:finished`
+- **WebSocket Live Updates** — Events streamed as tests run: `run:started`, `result:new`, `result:failed`, `run:finished`, `retry:requested`
 - **Redis Fan-out (optional)** — Horizontal scaling support via Redis pub/sub for multi-instance deployments
 - **Admin Access Layer** — Separate admin key for cross-team aggregated stats, top failing tests, and recent activity
 - **Zero-impact Reporter** — All API calls fail silently with exponential backoff retries; your test run never fails because of the reporter
@@ -273,12 +275,91 @@ Results, artifacts, and live status will appear in the dashboard immediately.
 
 | Page | URL | Description |
 |------|-----|-------------|
-| Overview | `/` | Global stats, run status breakdown, teams summary, recent activity |
-| Teams | `/teams` | All teams with pass rate and last run status |
-| Team detail | `/teams/[teamId]` | Per-team stats, top failing tests, recent runs |
-| Runs | `/runs` | All test runs across teams, filterable by team |
-| Run detail | `/runs/[id]` | Full results table, pass/fail bar, error details, artifacts |
-| Test Cases | `/test-cases` | All synced test cases, filterable by team and tag |
+| Overview | `/` | Global stats, run status breakdown, teams summary, and recent activity feed |
+| Teams | `/teams` | All teams with total test cases, total runs, pass rate, and last run status |
+| Team detail | `/teams/[teamId]` | Per-team stats: top failing tests, recent runs table, test case counts |
+| Test Runs | `/runs` | All test runs across all teams — filterable by team, sortable by date |
+| Run detail | `/runs/[id]` | Full results table with status filter, sort by status/duration/title, pass/fail bar, inline error details, artifact viewer, and Retry button on failed tests |
+| Test Cases | `/test-cases` | All synced test cases — filterable by team/tag/search; **Group by** suite, file path, tag, or team with collapsible accordion, pass-rate bars, per-group counts, and "Retry All Failed" button |
+| Test Case detail | `/test-cases/[id]` | Run history for a single test case — all past results with status, duration, error, artifacts, and Retry button on failed rows |
+| Retries | `/retries` | All retry requests — test case name, team, status badge, requested time, and completed time; auto-refreshes every 10 seconds |
+| Settings | `/settings` | API key and environment configuration reference |
+
+---
+
+### Test Cases Page — Group By
+
+The Test Cases page supports four grouping modes, all persisted to `localStorage`:
+
+| Group By | Description |
+|----------|-------------|
+| **Suite** *(default)* | Groups by `test.describe()` hierarchy (e.g. `Auth > Login`). Tests without a describe block appear under `(no suite)` |
+| **File Path** | Groups by the test file (e.g. `tests/checkout.spec.ts`) |
+| **Tag** | Groups by tag; a test with multiple tags appears in each matching group. Untagged tests appear under `(untagged)` |
+| **Team** | Groups by team name — useful in the all-teams admin view |
+| **None** | Flat paginated table (original view) |
+
+Each accordion group header shows:
+- A colored accent bar (red if any failures, green if 100% pass, gray if no runs yet)
+- A mini pass-rate bar
+- Pass ✓ / Fail ✗ / Total counts
+- **Retry All Failed** button (groups with failures only) — queues a retry request for every test in the group
+
+### Run Detail Page — Results Table
+
+| Column | Description |
+|--------|-------------|
+| Test Case | Test title + file path. Click the row to go to the test case detail page |
+| Status | `PASSED` / `FAILED` / `SKIPPED` / `RETRIED` badge |
+| Duration | Execution time (ms or seconds) |
+| Retries | Number of Playwright retries for this result |
+| Artifacts | Camera icon (screenshot), play icon (video), file icon (trace/log) — click to view inline |
+| Error | First line of the error message; click to open the full error in a modal |
+| Actions | **Retry** button on FAILED results — queues a re-run via the watcher |
+
+### Retries Page — Status Badges
+
+| Status | Colour | Meaning |
+|--------|--------|---------|
+| `PENDING` | Yellow | Request created, waiting for the watcher to pick it up |
+| `RUNNING` | Blue (pulsing dot) | Watcher has started the Playwright process |
+| `COMPLETED` | Green | Playwright finished — check Test Runs for the new result |
+| `EXPIRED` | Gray | Not picked up within 10 minutes; request expired automatically |
+
+---
+
+## Retry Watcher
+
+The Retry Watcher is a CLI process that runs alongside your Playwright project. It polls the API every 30 seconds for PENDING retry requests and triggers `playwright test --grep` for each one.
+
+### Starting the watcher
+
+In your Playwright project directory:
+
+```bash
+# Via the package script (template-test projects)
+npm run watch
+
+# Or directly with npx
+npx qc-monitor-watch
+```
+
+The watcher reads the same `qc-monitor.config.js` / environment variables as the reporter, so no extra configuration is needed.
+
+### Watcher lifecycle
+
+```
+Dashboard → POST /api/admin/retry
+         ← retry:requested WS event (badge turns yellow)
+Watcher  → GET /api/retry/pending  (every 30s)
+         ← [{ id, testCase: { title } }]
+         → PATCH /api/retry/:id { status: "RUNNING" }   (badge turns blue)
+         → npx playwright test --grep "<title>"
+         → PATCH /api/retry/:id { status: "COMPLETED" } (badge turns green)
+New result appears in Test Runs automatically via WebSocket
+```
+
+Requests not picked up within **10 minutes** are automatically expired by the API background job.
 
 ---
 
@@ -298,14 +379,15 @@ ws://localhost:3001/ws?adminKey=<ADMIN_SECRET_KEY>
 
 **Events:**
 
-| Event | When |
-|-------|------|
-| `connected` | On successful connection |
-| `run:started` | A new test run begins |
-| `result:new` | A test result is reported |
-| `result:failed` | A test fails |
-| `run:finished` | A run completes |
-| `artifact:new` | An artifact is uploaded |
+| Event | When | Key data fields |
+|-------|------|-----------------|
+| `connected` | On successful connection | — |
+| `run:started` | A new test run begins | `id`, `teamId` |
+| `result:new` | A test result is reported | `testRunId`, `testCaseId`, `status` |
+| `result:failed` | A test fails | `testRunId`, `testCaseTitle`, `error` |
+| `run:finished` | A run completes | `id`, `passed`, `failed`, `totalTests` |
+| `artifact:new` | An artifact is uploaded | `testRunId`, `testResultId`, `type` |
+| `retry:requested` | A retry was queued from the dashboard | `id`, `testCaseId`, `teamId` |
 
 Each event has the shape:
 
@@ -316,6 +398,8 @@ Each event has the shape:
   "timestamp": "2024-01-01T00:00:00.000Z"
 }
 ```
+
+Admin events include `teamId` and `teamName` in the `data` object.
 
 Keepalive: send `{ "type": "ping" }` → server replies `{ "type": "pong", "timestamp": "..." }`.
 
@@ -337,7 +421,7 @@ All routes require the `x-api-key` header unless noted otherwise.
 |--------|------|-------------|
 | GET | `/api/test-cases` | List test cases (paginated) |
 | GET | `/api/test-cases/:id` | Get test case detail |
-| POST | `/api/test-cases/sync` | Upsert test cases (used by reporter) |
+| POST | `/api/test-cases/sync` | Upsert test cases with `suiteName` (used by reporter) |
 
 ### Runs
 
@@ -362,6 +446,13 @@ All routes require the `x-api-key` header unless noted otherwise.
 | POST | `/api/artifacts/upload` | Upload file (multipart) |
 | GET | `/api/artifacts/:id/download` | Get presigned download URL |
 
+### Retry (team-scoped, requires `x-api-key`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/retry/pending` | Fetch PENDING retry requests for the authenticated team (used by the watcher) |
+| PATCH | `/api/retry/:id` | Update retry status — body: `{ status: "RUNNING" \| "COMPLETED" \| "EXPIRED", resultId? }` |
+
 ### Admin (requires `x-admin-key` header)
 
 | Method | Path | Description |
@@ -371,8 +462,30 @@ All routes require the `x-api-key` header unless noted otherwise.
 | GET | `/api/admin/teams/:teamId/stats` | Detailed team stats |
 | GET | `/api/admin/runs` | All runs (filter by `?teamId=`) |
 | GET | `/api/admin/runs/:id` | Run detail (no team scope) |
-| GET | `/api/admin/test-cases` | All test cases (filter by `?teamId=`) |
+| GET | `/api/admin/test-cases` | All test cases (filter by `?teamId=`, `?groupBy=suite\|filePath\|tag\|team`) |
+| GET | `/api/admin/test-cases/:id` | Single test case (no team scope) |
 | GET | `/api/admin/artifacts/:id/download` | Presigned URL (no team scope) |
+| POST | `/api/admin/retry` | Create retry request — body: `{ testCaseId, teamId }` |
+| GET | `/api/admin/retries` | List retry requests (filter by `?teamId=`, paginated) |
+
+#### `GET /api/admin/test-cases` — `groupBy` query param
+
+When `groupBy` is omitted the response is a standard paginated list. When set, the response changes shape:
+
+```jsonc
+// groupBy=suite (or filePath | tag | team)
+{
+  "groups": [
+    {
+      "name": "Auth > Login",
+      "testCases": [ { "id": "...", "title": "...", "filePath": "...", ... } ],
+      "stats": { "total": 5, "passed": 4, "failed": 1, "passRate": 80 }
+    }
+  ]
+}
+```
+
+Groups are sorted: failing groups first, then alphabetically by name.
 
 ---
 
@@ -415,6 +528,13 @@ Run from the monorepo root:
 | `pnpm publish:reporter` | Build and publish the reporter to GitHub Packages |
 | `pnpm --filter @qc-monitor/api admin:seed` | Generate and save a new admin key |
 
+Run from your Playwright project:
+
+| Command | Description |
+|---------|-------------|
+| `npm run watch` | Start the retry watcher (polls every 30s for pending retries) |
+| `npx qc-monitor-watch` | Same as above without the npm script |
+
 ---
 
 ## Production Notes
@@ -424,6 +544,7 @@ Run from the monorepo root:
 - Store `ADMIN_SECRET_KEY` in a secrets manager — never commit it
 - Redis is optional locally but recommended for production multi-instance deployments
 - MinIO can be replaced with AWS S3 or any S3-compatible service by updating the endpoint and credentials
+- The retry watcher should be run as a long-lived process (e.g. `pm2`, `systemd`, or a Docker container) in the same environment as your Playwright tests
 
 ---
 

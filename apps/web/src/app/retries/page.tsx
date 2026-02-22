@@ -1,7 +1,9 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { Suspense, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useRetries } from '@/hooks/use-retries';
+import { Pagination } from '@/components/Pagination';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -20,7 +22,7 @@ function formatDate(iso?: string) {
   return new Date(iso).toLocaleString();
 }
 
-function StatusBadge({ status }: { status: RetryRequestStatus }) {
+function RetryStatusBadge({ status }: { status: RetryRequestStatus }) {
   const classes: Record<RetryRequestStatus, string> = {
     PENDING: 'bg-yellow-500/10 text-yellow-400 border-yellow-700',
     RUNNING: 'bg-blue-500/10 text-blue-400 border-blue-700',
@@ -43,19 +45,37 @@ function StatusBadge({ status }: { status: RetryRequestStatus }) {
   );
 }
 
-export default function RetriesPage() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['retries'],
-    queryFn: () => api.getRetries({ limit: 50 }),
-    refetchInterval: 10_000,
-  });
+function RetriesPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const page = Number(searchParams.get('page') ?? '1');
+  const pageSize = Number(searchParams.get('pageSize') ?? '20');
+
+  function onPageChange(p: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', String(p));
+    router.push(`/retries?${params.toString()}`);
+  }
+
+  function onPageSizeChange(ps: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('pageSize', String(ps));
+    params.set('page', '1');
+    router.push(`/retries?${params.toString()}`);
+  }
+
+  const { data, isLoading, prefetchNext } = useRetries(page, pageSize);
+  const prefetchNextStable = useCallback(prefetchNext, [prefetchNext]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Retries</h1>
         <p className="text-zinc-400 text-sm mt-1">
-          {data ? `${data.total} retry request${data.total !== 1 ? 's' : ''}` : 'Loading…'}
+          {data
+            ? `${data.pagination.totalItems} retry request${data.pagination.totalItems !== 1 ? 's' : ''}`
+            : 'Loading…'}
         </p>
       </div>
 
@@ -85,7 +105,7 @@ export default function RetriesPage() {
                       ))}
                     </TableRow>
                   ))
-                : data?.items.map((r) => (
+                : data?.data.map((r) => (
                     <TableRow key={r.id} className="border-zinc-800 hover:bg-zinc-800/40">
                       <TableCell className="text-zinc-100 text-sm max-w-xs">
                         <div className="truncate font-medium" title={r.testCase.title}>
@@ -97,7 +117,7 @@ export default function RetriesPage() {
                       </TableCell>
                       <TableCell className="text-zinc-300 text-sm">{r.team.name}</TableCell>
                       <TableCell>
-                        <StatusBadge status={r.status} />
+                        <RetryStatusBadge status={r.status} />
                       </TableCell>
                       <TableCell className="text-zinc-400 text-xs whitespace-nowrap">
                         {formatDate(r.requestedAt)}
@@ -107,7 +127,7 @@ export default function RetriesPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-              {!isLoading && data?.items.length === 0 && (
+              {!isLoading && data?.data.length === 0 && (
                 <TableRow className="border-zinc-800">
                   <TableCell colSpan={5} className="text-center text-zinc-500 py-8">
                     No retry requests yet
@@ -118,6 +138,35 @@ export default function RetriesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {data && (
+        <Pagination
+          currentPage={data.pagination.page}
+          totalPages={data.pagination.totalPages}
+          totalItems={data.pagination.totalItems}
+          pageSize={data.pagination.pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          onPrefetchNext={prefetchNextStable}
+        />
+      )}
     </div>
+  );
+}
+
+function RetriesPageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-24 bg-zinc-800" />
+      <Skeleton className="h-64 bg-zinc-800 rounded-lg" />
+    </div>
+  );
+}
+
+export default function RetriesPage() {
+  return (
+    <Suspense fallback={<RetriesPageSkeleton />}>
+      <RetriesPageContent />
+    </Suspense>
   );
 }

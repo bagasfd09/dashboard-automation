@@ -1,5 +1,6 @@
 import type {
   Paginated,
+  PaginationMeta,
   TestCase,
   TestCaseDetail,
   TestRun,
@@ -10,6 +11,8 @@ import type {
   GroupedTestCases,
   RetryRequest,
 } from './types';
+
+export type { PaginationMeta };
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY ?? '';
@@ -53,7 +56,7 @@ export const api = {
     tag?: string;
     teamId?: string;
     page?: number;
-    limit?: number;
+    pageSize?: number;
   }) => apiFetch<Paginated<TestCase>>(`/api/admin/test-cases?${qs(p)}`),
   getTestCasesGrouped: (p: {
     search?: string;
@@ -70,11 +73,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ testCaseId, teamId }),
     }),
-  getRetries: (p: { teamId?: string; page?: number; limit?: number }) =>
+  getRetries: (p: { teamId?: string; page?: number; pageSize?: number }) =>
     apiFetch<Paginated<RetryRequest>>(`/api/admin/retries?${qs(p)}`),
 
   // ── Runs ──────────────────────────────────────────────────────────────────
-  getRuns: (p: { page?: number; limit?: number; teamId?: string }) =>
+  getRuns: (p: { page?: number; pageSize?: number; teamId?: string }) =>
     apiFetch<Paginated<TestRun>>(`/api/admin/runs?${qs(p)}`),
   getRun: (id: string) =>
     apiFetch<RunDetail>(`/api/admin/runs/${id}`),
