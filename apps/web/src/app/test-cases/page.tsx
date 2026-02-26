@@ -3,9 +3,15 @@
 import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
-import { useTestCases, useGroupedTestCases, type TestCaseFilters } from '@/hooks/use-test-cases';
+import {
+  useTestCases,
+  useGroupedTestCases,
+  useSuiteTestCases,
+  type TestCaseFilters,
+} from '@/hooks/use-test-cases';
 import { useTeams } from '@/hooks/use-teams';
 import { Pagination } from '@/components/Pagination';
+import { InnerPagination } from '@/components/InnerPagination';
 import {
   Card,
   CardContent,
@@ -27,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +53,9 @@ const GROUP_BY_OPTIONS: { value: GroupByOption; label: string }[] = [
   { value: 'none', label: 'None (flat)' },
 ];
 
+const INNER_PAGE_SIZE = 5;
+const OUTER_GROUP_PAGE_SIZE = 10;
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString();
 }
@@ -61,15 +69,214 @@ function PassRateBar({ passed, failed, total }: { passed: number; failed: number
   const noneRunPct = 100 - passedPct - failedPct;
 
   return (
-    <div className="flex h-1.5 rounded-full overflow-hidden bg-zinc-700 w-24">
+    <div className="flex h-1.5 rounded-full overflow-hidden bg-muted w-24">
       <div className="bg-green-500" style={{ width: `${passedPct}%` }} />
       <div className="bg-red-500" style={{ width: `${failedPct}%` }} />
-      <div className="bg-zinc-600" style={{ width: `${noneRunPct}%` }} />
+      <div className="bg-muted-foreground/30" style={{ width: `${noneRunPct}%` }} />
     </div>
   );
 }
 
-// ── Group accordion item ─────────────────────────────────────────────────────
+// ── Suite accordion with inner pagination ────────────────────────────────────
+
+function SuiteAccordion({
+  group,
+  outerPage,
+  defaultOpen,
+  onNavigate,
+  filters,
+}: {
+  group: TestCaseGroup;
+  outerPage: number;
+  defaultOpen: boolean;
+  onNavigate: (id: string) => void;
+  filters: TestCaseFilters;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [innerPage, setInnerPage] = useState(1);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    setInnerPage(1);
+    setShowAll(false);
+  }, [outerPage]);
+
+  const { stats, pagination: groupPagination } = group;
+  const hasInnerPagination = (groupPagination?.totalPages ?? 1) > 1;
+
+  const effectivePageSize = showAll
+    ? Math.min(groupPagination?.totalItems ?? 999, 500)
+    : (groupPagination?.pageSize ?? INNER_PAGE_SIZE);
+
+  const { data: suiteData, isLoading: suiteLoading } = useSuiteTestCases(
+    group.name,
+    filters.teamId,
+    showAll ? 1 : innerPage,
+    effectivePageSize,
+    filters,
+    open && (innerPage > 1 || showAll),
+  );
+
+  const testCases = (innerPage > 1 || showAll) && suiteData
+    ? suiteData.data
+    : group.testCases;
+
+  const paginationMeta = (innerPage > 1 || showAll) && suiteData
+    ? suiteData.pagination
+    : groupPagination;
+
+  const accentClass = cn(
+    'w-1 self-stretch rounded-full mr-3 shrink-0',
+    stats.failed > 0 ? 'bg-red-500'
+      : stats.passRate === 100 && stats.total > 0 ? 'bg-green-500'
+      : 'bg-muted-foreground/40',
+  );
+
+  const headerClass = cn(
+    'flex items-center justify-between px-4 py-3 cursor-pointer select-none border-b border-border transition-colors',
+    stats.failed > 0
+      ? 'hover:bg-red-50 dark:hover:bg-red-950/30'
+      : stats.passRate === 100 && stats.total > 0
+      ? 'hover:bg-green-50/80 dark:hover:bg-green-950/20'
+      : 'hover:bg-muted/50',
+  );
+
+  async function retryAllFailed() {
+    for (const tc of group.testCases) {
+      try {
+        await api.requestRetry(tc.id, tc.teamId);
+      } catch {
+        // individual failures silently skipped
+      }
+    }
+    toast.info(`Retry queued for failed test(s) in "${group.name}"`);
+  }
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <div className={headerClass} onClick={() => setOpen((o) => !o)}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={accentClass} />
+          {open ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          )}
+          <span className="font-medium text-sm text-foreground truncate">{group.name}</span>
+        </div>
+
+        <div className="flex items-center gap-4 shrink-0 ml-4">
+          <div className="hidden sm:flex items-center gap-2">
+            <PassRateBar passed={stats.passed} failed={stats.failed} total={stats.total} />
+            <span className="text-xs text-muted-foreground w-8 text-right">{stats.passRate}%</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="text-green-600 dark:text-green-400">{stats.passed}✓</span>
+            {stats.failed > 0 && <span className="text-red-600 dark:text-red-400">{stats.failed}✗</span>}
+            <span className="text-muted-foreground">{stats.total} total</span>
+          </div>
+          {stats.failed > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); void retryAllFailed(); }}
+              className="hidden sm:flex items-center gap-1 px-2 py-1 rounded text-xs text-orange-600 dark:text-orange-400 border border-orange-300 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-colors"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Retry all failed
+            </button>
+          )}
+        </div>
+      </div>
+
+      {open && (
+        <>
+          {suiteLoading ? (
+            <div className="p-4 space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 bg-muted rounded" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="text-muted-foreground">Title</TableHead>
+                  <TableHead className="text-muted-foreground">File Path</TableHead>
+                  <TableHead className="text-muted-foreground">Tags</TableHead>
+                  <TableHead className="text-muted-foreground">Team</TableHead>
+                  <TableHead className="text-muted-foreground">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {testCases.map((tc) => (
+                  <TableRow
+                    key={tc.id}
+                    className="border-border hover:bg-muted/50 cursor-pointer"
+                    onClick={() => onNavigate(tc.id)}
+                  >
+                    <TableCell className="text-foreground text-sm font-medium max-w-xs truncate">
+                      {tc.title}
+                    </TableCell>
+                    <TableCell className="max-w-xs">
+                      <code className="text-xs text-muted-foreground font-mono truncate block">
+                        {tc.filePath}
+                      </code>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {tc.tags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="secondary"
+                            className="text-xs bg-muted text-muted-foreground border-border"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {tc.team ? (
+                        <span
+                          className={cn(
+                            'inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium',
+                            teamColorClass(tc.team.id),
+                          )}
+                        >
+                          {tc.team.name}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/60 text-xs">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <RetryButton testCaseId={tc.id} teamId={tc.teamId} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {hasInnerPagination && !showAll && (
+            <InnerPagination
+              currentPage={innerPage}
+              totalPages={paginationMeta?.totalPages ?? 1}
+              totalItems={paginationMeta?.totalItems ?? testCases.length}
+              pageSize={paginationMeta?.pageSize ?? INNER_PAGE_SIZE}
+              onPageChange={setInnerPage}
+              onShowAll={() => {
+                setShowAll(true);
+                setInnerPage(1);
+              }}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Generic group accordion (for filePath / tag / team groupBy) ───────────────
 
 function GroupAccordion({
   group,
@@ -84,12 +291,12 @@ function GroupAccordion({
   const { stats } = group;
 
   const headerClass = cn(
-    'flex items-center justify-between px-4 py-3 cursor-pointer select-none border-b border-zinc-800 transition-colors',
+    'flex items-center justify-between px-4 py-3 cursor-pointer select-none border-b border-border transition-colors',
     stats.failed > 0
-      ? 'hover:bg-red-950/30'
+      ? 'hover:bg-red-50 dark:hover:bg-red-950/30'
       : stats.passRate === 100 && stats.total > 0
-        ? 'hover:bg-green-950/20'
-        : 'hover:bg-zinc-800/50',
+        ? 'hover:bg-green-50/80 dark:hover:bg-green-950/20'
+        : 'hover:bg-muted/50',
   );
 
   const accentClass = cn(
@@ -98,7 +305,7 @@ function GroupAccordion({
       ? 'bg-red-500'
       : stats.passRate === 100 && stats.total > 0
         ? 'bg-green-500'
-        : 'bg-zinc-600',
+        : 'bg-muted-foreground/40',
   );
 
   async function retryAllFailed() {
@@ -113,32 +320,32 @@ function GroupAccordion({
   }
 
   return (
-    <div className="border border-zinc-800 rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden">
       <div className={headerClass} onClick={() => setOpen((o) => !o)}>
         <div className="flex items-center gap-3 min-w-0">
           <div className={accentClass} />
           {open ? (
-            <ChevronDown className="h-4 w-4 text-zinc-400 shrink-0" />
+            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-zinc-400 shrink-0" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
           )}
-          <span className="font-medium text-sm text-zinc-100 truncate">{group.name}</span>
+          <span className="font-medium text-sm text-foreground truncate">{group.name}</span>
         </div>
 
         <div className="flex items-center gap-4 shrink-0 ml-4">
           <div className="hidden sm:flex items-center gap-2">
             <PassRateBar passed={stats.passed} failed={stats.failed} total={stats.total} />
-            <span className="text-xs text-zinc-400 w-8 text-right">{stats.passRate}%</span>
+            <span className="text-xs text-muted-foreground w-8 text-right">{stats.passRate}%</span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <span className="text-green-400">{stats.passed}✓</span>
-            {stats.failed > 0 && <span className="text-red-400">{stats.failed}✗</span>}
-            <span className="text-zinc-500">{stats.total} total</span>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="text-green-600 dark:text-green-400">{stats.passed}✓</span>
+            {stats.failed > 0 && <span className="text-red-600 dark:text-red-400">{stats.failed}✗</span>}
+            <span className="text-muted-foreground">{stats.total} total</span>
           </div>
           {stats.failed > 0 && (
             <button
               onClick={(e) => { e.stopPropagation(); void retryAllFailed(); }}
-              className="hidden sm:flex items-center gap-1 px-2 py-1 rounded text-xs text-orange-400 border border-orange-800 hover:bg-orange-950/30 transition-colors"
+              className="hidden sm:flex items-center gap-1 px-2 py-1 rounded text-xs text-orange-600 dark:text-orange-400 border border-orange-300 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-colors"
             >
               <RotateCcw className="h-3 w-3" />
               Retry all failed
@@ -150,26 +357,26 @@ function GroupAccordion({
       {open && (
         <Table>
           <TableHeader>
-            <TableRow className="border-zinc-800 hover:bg-transparent">
-              <TableHead className="text-zinc-400">Title</TableHead>
-              <TableHead className="text-zinc-400">File Path</TableHead>
-              <TableHead className="text-zinc-400">Tags</TableHead>
-              <TableHead className="text-zinc-400">Team</TableHead>
-              <TableHead className="text-zinc-400">Actions</TableHead>
+            <TableRow className="border-border hover:bg-transparent">
+              <TableHead className="text-muted-foreground">Title</TableHead>
+              <TableHead className="text-muted-foreground">File Path</TableHead>
+              <TableHead className="text-muted-foreground">Tags</TableHead>
+              <TableHead className="text-muted-foreground">Team</TableHead>
+              <TableHead className="text-muted-foreground">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {group.testCases.map((tc) => (
               <TableRow
                 key={tc.id}
-                className="border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
+                className="border-border hover:bg-muted/50 cursor-pointer"
                 onClick={() => onNavigate(tc.id)}
               >
-                <TableCell className="text-zinc-100 text-sm font-medium max-w-xs truncate">
+                <TableCell className="text-foreground text-sm font-medium max-w-xs truncate">
                   {tc.title}
                 </TableCell>
                 <TableCell className="max-w-xs">
-                  <code className="text-xs text-zinc-400 font-mono truncate block">
+                  <code className="text-xs text-muted-foreground font-mono truncate block">
                     {tc.filePath}
                   </code>
                 </TableCell>
@@ -179,7 +386,7 @@ function GroupAccordion({
                       <Badge
                         key={tag}
                         variant="secondary"
-                        className="text-xs bg-zinc-800 text-zinc-300 border-zinc-700"
+                        className="text-xs bg-muted text-muted-foreground border-border"
                       >
                         {tag}
                       </Badge>
@@ -197,7 +404,7 @@ function GroupAccordion({
                       {tc.team.name}
                     </span>
                   ) : (
-                    <span className="text-zinc-600 text-xs">—</span>
+                    <span className="text-muted-foreground/60 text-xs">—</span>
                   )}
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
@@ -217,19 +424,33 @@ function GroupAccordion({
 function GroupedView({
   groupBy,
   filters,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
   onNavigate,
 }: {
   groupBy: 'suite' | 'filePath' | 'tag' | 'team';
   filters: TestCaseFilters;
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (ps: number) => void;
   onNavigate: (id: string) => void;
 }) {
-  const { data, isLoading } = useGroupedTestCases(groupBy, filters);
+  const { data, isLoading } = useGroupedTestCases(
+    groupBy,
+    filters,
+    page,
+    pageSize,
+    INNER_PAGE_SIZE,
+  );
 
   if (isLoading) {
     return (
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-14 bg-zinc-800 rounded-lg" />
+          <Skeleton key={i} className="h-14 bg-muted rounded-lg" />
         ))}
       </div>
     );
@@ -237,20 +458,44 @@ function GroupedView({
 
   if (!data?.groups.length) {
     return (
-      <div className="text-center text-zinc-500 py-12">No test cases found</div>
+      <div className="text-center text-muted-foreground py-12">No test cases found</div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {data.groups.map((group, i) => (
-        <GroupAccordion
-          key={group.name}
-          group={group}
-          defaultOpen={i === 0 || group.stats.failed > 0}
-          onNavigate={onNavigate}
+    <div className="space-y-4">
+      <div className="space-y-3">
+        {data.groups.map((group, i) =>
+          groupBy === 'suite' ? (
+            <SuiteAccordion
+              key={`${group.name}-${page}`}
+              group={group}
+              outerPage={page}
+              defaultOpen={i === 0 || group.stats.failed > 0}
+              onNavigate={onNavigate}
+              filters={filters}
+            />
+          ) : (
+            <GroupAccordion
+              key={group.name}
+              group={group}
+              defaultOpen={i === 0 || group.stats.failed > 0}
+              onNavigate={onNavigate}
+            />
+          )
+        )}
+      </div>
+
+      {data.pagination && (
+        <Pagination
+          currentPage={data.pagination.page}
+          totalPages={data.pagination.totalPages}
+          totalItems={data.pagination.totalItems}
+          pageSize={data.pagination.pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
         />
-      ))}
+      )}
     </div>
   );
 }
@@ -277,12 +522,12 @@ function FlatView({
 
   return (
     <>
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-white text-base">
+          <CardTitle className="text-foreground text-base">
             Test Cases
             {data && (
-              <span className="ml-2 text-zinc-500 font-normal text-sm">
+              <span className="ml-2 text-muted-foreground font-normal text-sm">
                 ({data.pagination.totalItems} total)
               </span>
             )}
@@ -291,22 +536,22 @@ function FlatView({
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-400">Title</TableHead>
-                <TableHead className="text-zinc-400">File Path</TableHead>
-                <TableHead className="text-zinc-400">Tags</TableHead>
-                <TableHead className="text-zinc-400">Team</TableHead>
-                <TableHead className="text-zinc-400">Updated</TableHead>
-                <TableHead className="text-zinc-400">Actions</TableHead>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Title</TableHead>
+                <TableHead className="text-muted-foreground">File Path</TableHead>
+                <TableHead className="text-muted-foreground">Tags</TableHead>
+                <TableHead className="text-muted-foreground">Team</TableHead>
+                <TableHead className="text-muted-foreground">Updated</TableHead>
+                <TableHead className="text-muted-foreground">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading
                 ? Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i} className="border-zinc-800">
+                    <TableRow key={i} className="border-border">
                       {Array.from({ length: 6 }).map((_, j) => (
                         <TableCell key={j}>
-                          <Skeleton className="h-4 w-24 bg-zinc-800" />
+                          <Skeleton className="h-4 w-24 bg-muted" />
                         </TableCell>
                       ))}
                     </TableRow>
@@ -314,14 +559,14 @@ function FlatView({
                 : data?.data.map((tc: TestCase) => (
                     <TableRow
                       key={tc.id}
-                      className="border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
+                      className="border-border hover:bg-muted/50 cursor-pointer"
                       onClick={() => onNavigate(tc.id)}
                     >
-                      <TableCell className="text-zinc-100 text-sm font-medium max-w-xs truncate">
+                      <TableCell className="text-foreground text-sm font-medium max-w-xs truncate">
                         {tc.title}
                       </TableCell>
                       <TableCell className="max-w-xs">
-                        <code className="text-xs text-zinc-400 font-mono truncate block">
+                        <code className="text-xs text-muted-foreground font-mono truncate block">
                           {tc.filePath}
                         </code>
                       </TableCell>
@@ -331,7 +576,7 @@ function FlatView({
                             <Badge
                               key={tag}
                               variant="secondary"
-                              className="text-xs bg-zinc-800 text-zinc-300 border-zinc-700"
+                              className="text-xs bg-muted text-muted-foreground border-border"
                             >
                               {tag}
                             </Badge>
@@ -349,10 +594,10 @@ function FlatView({
                             {tc.team.name}
                           </span>
                         ) : (
-                          <span className="text-zinc-600 text-xs">—</span>
+                          <span className="text-muted-foreground/60 text-xs">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-zinc-400 text-xs">
+                      <TableCell className="text-muted-foreground text-xs">
                         {formatDate(tc.updatedAt)}
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
@@ -361,8 +606,8 @@ function FlatView({
                     </TableRow>
                   ))}
               {!isLoading && data?.data.length === 0 && (
-                <TableRow className="border-zinc-800">
-                  <TableCell colSpan={6} className="text-center text-zinc-500 py-8">
+                <TableRow className="border-border">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     No test cases found
                   </TableCell>
                 </TableRow>
@@ -394,17 +639,15 @@ function TestCasesPageContent() {
   const searchParams = useSearchParams();
 
   const page = Number(searchParams.get('page') ?? '1');
-  const pageSize = Number(searchParams.get('pageSize') ?? '20');
+  const pageSize = Number(searchParams.get('pageSize') ?? String(OUTER_GROUP_PAGE_SIZE));
   const groupByParam = (searchParams.get('groupBy') as GroupByOption | null) ?? null;
 
-  // groupBy: prefer URL param, fall back to localStorage, default 'suite'
   const [groupBy, setGroupBy] = useState<GroupByOption>(() => {
     if (groupByParam) return groupByParam;
     if (typeof window === 'undefined') return 'suite';
     return (localStorage.getItem('tc-groupBy') as GroupByOption) ?? 'suite';
   });
 
-  // Sync groupBy state when URL param changes
   useEffect(() => {
     if (groupByParam && groupByParam !== groupBy) {
       setGroupBy(groupByParam);
@@ -419,36 +662,33 @@ function TestCasesPageContent() {
 
   const { data: teams } = useTeams();
 
-  // Debounced search
+  function resetToPage1() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', '1');
+    router.replace(`/test-cases?${params.toString()}`);
+  }
+
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => {
       setFilters((f) => ({ ...f, search: searchInput || undefined }));
-      // Reset page on filter change
-      const params = new URLSearchParams(searchParams.toString());
-      params.set('page', '1');
-      router.replace(`/test-cases?${params.toString()}`);
+      resetToPage1();
     }, 300);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
   }, [searchInput]);
 
-  // Debounced tag filter
   useEffect(() => {
     if (tagTimer.current) clearTimeout(tagTimer.current);
     tagTimer.current = setTimeout(() => {
       setFilters((f) => ({ ...f, tag: tagInput || undefined }));
-      const params = new URLSearchParams(searchParams.toString());
-      params.set('page', '1');
-      router.replace(`/test-cases?${params.toString()}`);
+      resetToPage1();
     }, 300);
     return () => { if (tagTimer.current) clearTimeout(tagTimer.current); };
   }, [tagInput]);
 
   function onTeamChange(value: string) {
     setFilters((f) => ({ ...f, teamId: value === 'all' ? undefined : value }));
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('page', '1');
-    router.replace(`/test-cases?${params.toString()}`);
+    resetToPage1();
   }
 
   function handleGroupByChange(value: GroupByOption) {
@@ -480,8 +720,8 @@ function TestCasesPageContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Test Cases</h1>
-        <p className="text-zinc-400 text-sm mt-1">
+        <h1 className="text-2xl font-bold text-foreground">Test Cases</h1>
+        <p className="text-muted-foreground text-sm mt-1">
           Browse and group test cases by suite, file, tag, or team.
         </p>
       </div>
@@ -492,22 +732,22 @@ function TestCasesPageContent() {
           placeholder="Search by title…"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          className="w-52 bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+          className="w-52 bg-card border-border text-foreground placeholder:text-muted-foreground"
         />
         <Input
           placeholder="Filter by tag…"
           value={tagInput}
           onChange={(e) => setTagInput(e.target.value)}
-          className="w-40 bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+          className="w-40 bg-card border-border text-foreground placeholder:text-muted-foreground"
         />
         <Select onValueChange={onTeamChange} defaultValue="all">
-          <SelectTrigger className="w-44 bg-zinc-900 border-zinc-700 text-zinc-100">
+          <SelectTrigger className="w-44 bg-card border-border text-foreground">
             <SelectValue placeholder="All teams" />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
-            <SelectItem value="all" className="focus:bg-zinc-800">All teams</SelectItem>
+          <SelectContent className="bg-card border-border text-foreground">
+            <SelectItem value="all" className="focus:bg-muted">All teams</SelectItem>
             {teams?.map((team) => (
-              <SelectItem key={team.id} value={team.id} className="focus:bg-zinc-800">
+              <SelectItem key={team.id} value={team.id} className="focus:bg-muted">
                 {team.name}
               </SelectItem>
             ))}
@@ -515,14 +755,14 @@ function TestCasesPageContent() {
         </Select>
 
         <div className="flex items-center gap-2 ml-auto">
-          <span className="text-xs text-zinc-400">Group by:</span>
+          <span className="text-xs text-muted-foreground">Group by:</span>
           <Select value={groupBy} onValueChange={handleGroupByChange}>
-            <SelectTrigger className="w-36 bg-zinc-900 border-zinc-700 text-zinc-100">
+            <SelectTrigger className="w-36 bg-card border-border text-foreground">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
+            <SelectContent className="bg-card border-border text-foreground">
               {GROUP_BY_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="focus:bg-zinc-800">
+                <SelectItem key={opt.value} value={opt.value} className="focus:bg-muted">
                   {opt.label}
                 </SelectItem>
               ))}
@@ -545,6 +785,10 @@ function TestCasesPageContent() {
         <GroupedView
           groupBy={groupBy}
           filters={filters}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
           onNavigate={navigateToTestCase}
         />
       )}
@@ -555,13 +799,13 @@ function TestCasesPageContent() {
 function TestCasesPageSkeleton() {
   return (
     <div className="space-y-6">
-      <Skeleton className="h-8 w-40 bg-zinc-800" />
+      <Skeleton className="h-8 w-40 bg-muted" />
       <div className="flex gap-3">
-        <Skeleton className="h-10 w-52 bg-zinc-800" />
-        <Skeleton className="h-10 w-40 bg-zinc-800" />
-        <Skeleton className="h-10 w-44 bg-zinc-800" />
+        <Skeleton className="h-10 w-52 bg-muted" />
+        <Skeleton className="h-10 w-40 bg-muted" />
+        <Skeleton className="h-10 w-44 bg-muted" />
       </div>
-      <Skeleton className="h-64 bg-zinc-800 rounded-lg" />
+      <Skeleton className="h-64 bg-muted rounded-lg" />
     </div>
   );
 }

@@ -2,6 +2,8 @@ import './types.js';
 import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import compress from '@fastify/compress';
+import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
 import multipart from '@fastify/multipart';
 import { prisma } from '@qc-monitor/db';
@@ -16,6 +18,7 @@ import { resultRoutes } from './routes/results.js';
 import { artifactRoutes } from './routes/artifacts.js';
 import { adminRoutes } from './routes/admin.routes.js';
 import { retryRoutes } from './routes/retry.routes.js';
+import { authRoutes } from './routes/auth.routes.js';
 import { expireOldRequests } from './services/retryService.js';
 
 const app = Fastify({
@@ -25,7 +28,12 @@ const app = Fastify({
 });
 
 async function bootstrap() {
-  await app.register(cors, { origin: true });
+  await app.register(cors, {
+    origin: process.env.FRONTEND_URL ?? process.env.APP_URL ?? 'http://localhost:3000',
+    credentials: true,
+  });
+  await app.register(compress, { global: true });
+  await app.register(cookie);
   await app.register(websocket);
   await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } }); // 50 MB
   await app.register(minioPlugin);
@@ -47,6 +55,7 @@ async function bootstrap() {
   await app.register(artifactRoutes, { prefix: '/api/artifacts' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(retryRoutes, { prefix: '/api/retry' });
+  await app.register(authRoutes, { prefix: '/api/auth' });
 
   // Expire stale PENDING retry requests every minute
   setInterval(() => void expireOldRequests(), 60_000);

@@ -5,23 +5,33 @@
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "admin:seed": "tsx src/scripts/seed-admin.ts"
+    "seed": "tsx src/scripts/seed-admin.ts",
+    "admin:seed": "tsx src/scripts/seed-admin.ts",
+    "admin:reset-password": "tsx src/scripts/reset-admin-password.ts",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/compress": "^8.0.0",
+    "@fastify/cookie": "^11.0.0",
     "@fastify/cors": "^10.0.0",
     "@fastify/multipart": "^9.0.0",
     "@fastify/websocket": "^11.0.0",
     "@qc-monitor/db": "workspace:*",
     "@qc-monitor/shared": "workspace:*",
+    "bcryptjs": "^2.4.3",
     "fastify": "^5.0.0",
     "fastify-plugin": "^5.1.0",
     "ioredis": "^5.9.3",
+    "jsonwebtoken": "^9.0.2",
     "minio": "^8.0.6"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.0.0",
     "dotenv": "^16.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   }
 }

@@ -62,7 +62,9 @@ export async function listRetries(params: {
   data: RetryRequestWithDetails[];
   pagination: { page: number; pageSize: number; totalItems: number; totalPages: number };
 }> {
-  const { teamId, page = 1, pageSize = 20 } = params;
+  const { teamId } = params;
+  const page = Number(params.page ?? 1);
+  const pageSize = Number(params.pageSize ?? 20);
   const skip = (page - 1) * pageSize;
   const where = teamId ? { teamId } : {};
 

@@ -72,16 +72,32 @@ export function Pagination({
   if (totalPages <= 1 && !onPageSizeChange) return null;
 
   const btnBase =
-    'h-8 w-8 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 disabled:opacity-40 disabled:pointer-events-none';
+    'h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:pointer-events-none';
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      {/* Showing X–Y of Z */}
-      <span className="text-zinc-400 text-sm shrink-0">
-        {totalItems === 0 ? 'No results' : `Showing ${from}–${to} of ${totalItems}`}
-      </span>
+      {/* Left: item count + page size selector */}
+      <div className="flex items-center gap-3">
+        <span className="text-muted-foreground text-sm shrink-0">
+          {totalItems === 0 ? 'No results' : `Showing ${from}–${to} of ${totalItems}`}
+        </span>
+        {onPageSizeChange && (
+          <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
+            <SelectTrigger className="w-[110px] h-8 bg-card border-border text-foreground text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-card border-border text-foreground">
+              {[10, 20, 50, 100].map((n) => (
+                <SelectItem key={n} value={String(n)} className="focus:bg-muted text-sm">
+                  {n} / page
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
 
-      {/* Page buttons */}
+      {/* Right: navigation buttons */}
       <div className="flex items-center gap-0.5">
         <Button
           variant="ghost"
@@ -106,7 +122,7 @@ export function Pagination({
 
         {pages.map((p, i) =>
           p === 'ellipsis' ? (
-            <span key={`ell-${i}`} className="px-1.5 text-zinc-600 text-sm select-none">
+            <span key={`ell-${i}`} className="px-1.5 text-muted-foreground/60 text-sm select-none">
               …
             </span>
           ) : (
@@ -116,7 +132,7 @@ export function Pagination({
               size="icon"
               className={
                 p === currentPage
-                  ? 'h-8 w-8 bg-zinc-700 text-zinc-100 font-semibold pointer-events-none'
+                  ? 'h-8 w-8 bg-muted text-foreground font-semibold pointer-events-none'
                   : btnBase
               }
               onClick={() => onPageChange(p)}
@@ -149,22 +165,6 @@ export function Pagination({
           <ChevronLast className="h-4 w-4" />
         </Button>
       </div>
-
-      {/* Page size selector */}
-      {onPageSizeChange && (
-        <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
-          <SelectTrigger className="w-[110px] h-8 bg-zinc-900 border-zinc-700 text-zinc-300 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
-            {[10, 20, 50, 100].map((n) => (
-              <SelectItem key={n} value={String(n)} className="focus:bg-zinc-800 text-sm">
-                {n} / page
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
     </div>
   );
 }

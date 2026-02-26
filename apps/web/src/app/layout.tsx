@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Sidebar } from '@/components/layout/sidebar';
-import { Providers } from '@/components/providers';
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { AuthProvider } from '@/providers/AuthProvider';
+import { ClientLayout } from '@/components/ClientLayout';
 
 export const metadata: Metadata = {
   title: 'QC Monitor',
@@ -14,12 +15,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-zinc-950 text-zinc-50 flex h-screen overflow-hidden">
-        <Sidebar />
-        <Providers>
-          <main className="flex-1 overflow-auto p-6">{children}</main>
-        </Providers>
+    <html lang="en" suppressHydrationWarning>
+      <body className="bg-background text-foreground flex h-screen overflow-hidden">
+        <ThemeProvider>
+          <AuthProvider>
+            <ClientLayout>{children}</ClientLayout>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

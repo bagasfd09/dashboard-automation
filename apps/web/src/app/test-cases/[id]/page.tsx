@@ -53,13 +53,13 @@ function ArtifactDisplay({ artifact }: { artifact: Artifact }) {
           <img
             src={url}
             alt={artifact.fileName}
-            className="w-24 h-16 object-cover rounded border border-zinc-700 hover:border-zinc-500 cursor-pointer"
+            className="w-24 h-16 object-cover rounded border border-border hover:border-muted-foreground/50 cursor-pointer transition-colors"
           />
         </button>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-w-4xl bg-zinc-900 border-zinc-700">
+          <DialogContent className="max-w-4xl bg-card border-border">
             <DialogHeader>
-              <DialogTitle className="text-white">{artifact.fileName}</DialogTitle>
+              <DialogTitle className="text-foreground">{artifact.fileName}</DialogTitle>
             </DialogHeader>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={url} alt={artifact.fileName} className="w-full rounded" />
@@ -74,7 +74,7 @@ function ArtifactDisplay({ artifact }: { artifact: Artifact }) {
       <video
         src={url}
         controls
-        className="max-w-xs rounded border border-zinc-700"
+        className="max-w-xs rounded border border-border"
       />
     );
   }
@@ -83,7 +83,7 @@ function ArtifactDisplay({ artifact }: { artifact: Artifact }) {
     <a
       href={url}
       download={artifact.fileName}
-      className="text-blue-400 hover:text-blue-300 text-xs underline"
+      className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 text-xs underline"
     >
       Download {artifact.fileName}
     </a>
@@ -98,17 +98,17 @@ export default function TestCaseDetailPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-8 w-64 bg-zinc-800" />
-        <Skeleton className="h-40 w-full bg-zinc-800" />
+        <Skeleton className="h-8 w-64 bg-muted" />
+        <Skeleton className="h-40 w-full bg-muted" />
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="text-zinc-500 py-12 text-center">
+      <div className="text-muted-foreground py-12 text-center">
         Test case not found.{' '}
-        <Button variant="link" onClick={() => router.back()} className="text-blue-400">
+        <Button variant="link" onClick={() => router.back()} className="text-blue-600 dark:text-blue-400">
           Go back
         </Button>
       </div>
@@ -126,31 +126,31 @@ export default function TestCaseDetailPage() {
           variant="ghost"
           size="sm"
           onClick={() => router.back()}
-          className="text-zinc-400 hover:text-zinc-100"
+          className="text-muted-foreground hover:text-foreground"
         >
           ← Back
         </Button>
-        <h1 className="text-2xl font-bold text-white truncate">{data.title}</h1>
+        <h1 className="text-2xl font-bold text-foreground truncate">{data.title}</h1>
       </div>
 
       {/* Header card */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-card border-border">
         <CardContent className="pt-6 space-y-3">
           <div>
-            <span className="text-xs text-zinc-500 uppercase tracking-wide">File Path</span>
-            <code className="block mt-1 text-sm text-zinc-300 font-mono bg-zinc-800 px-3 py-1.5 rounded">
+            <span className="text-xs text-muted-foreground uppercase tracking-wide">File Path</span>
+            <code className="block mt-1 text-sm text-foreground/80 font-mono bg-muted px-3 py-1.5 rounded">
               {data.filePath}
             </code>
           </div>
           {data.tags.length > 0 && (
             <div>
-              <span className="text-xs text-zinc-500 uppercase tracking-wide">Tags</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wide">Tags</span>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {data.tags.map((tag) => (
                   <Badge
                     key={tag}
                     variant="secondary"
-                    className="bg-zinc-800 text-zinc-300 border-zinc-700"
+                    className="bg-muted text-muted-foreground border-border"
                   >
                     {tag}
                   </Badge>
@@ -162,41 +162,41 @@ export default function TestCaseDetailPage() {
       </Card>
 
       {/* History table */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-white text-base">
+          <CardTitle className="text-foreground text-base">
             Run History ({sortedResults.length})
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-400">Run Date</TableHead>
-                <TableHead className="text-zinc-400">Status</TableHead>
-                <TableHead className="text-zinc-400">Duration</TableHead>
-                <TableHead className="text-zinc-400">Retries</TableHead>
-                <TableHead className="text-zinc-400">Error</TableHead>
-                <TableHead className="text-zinc-400">Artifacts</TableHead>
-                <TableHead className="text-zinc-400">Actions</TableHead>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Run Date</TableHead>
+                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="text-muted-foreground">Duration</TableHead>
+                <TableHead className="text-muted-foreground">Retries</TableHead>
+                <TableHead className="text-muted-foreground">Error</TableHead>
+                <TableHead className="text-muted-foreground">Artifacts</TableHead>
+                <TableHead className="text-muted-foreground">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedResults.map((result) => (
-                <TableRow key={result.id} className="border-zinc-800 hover:bg-zinc-800/50 align-top">
-                  <TableCell className="text-zinc-400 text-xs whitespace-nowrap">
+                <TableRow key={result.id} className="border-border hover:bg-muted/50 align-top">
+                  <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
                     {formatDate(result.startedAt)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={result.status as TestStatus} type="test" />
                   </TableCell>
-                  <TableCell className="text-zinc-400 text-sm">
+                  <TableCell className="text-muted-foreground text-sm">
                     {formatDuration(result.duration)}
                   </TableCell>
-                  <TableCell className="text-zinc-400 text-sm">{result.retryCount}</TableCell>
-                  <TableCell className="text-zinc-400 text-xs max-w-xs">
+                  <TableCell className="text-muted-foreground text-sm">{result.retryCount}</TableCell>
+                  <TableCell className="text-muted-foreground text-xs max-w-xs">
                     {result.error ? (
-                      <span className="text-red-400 truncate block" title={result.error}>
+                      <span className="text-red-600 dark:text-red-400 truncate block" title={result.error}>
                         {result.error.slice(0, 60)}{result.error.length > 60 ? '…' : ''}
                       </span>
                     ) : (
@@ -218,8 +218,8 @@ export default function TestCaseDetailPage() {
                 </TableRow>
               ))}
               {sortedResults.length === 0 && (
-                <TableRow className="border-zinc-800">
-                  <TableCell colSpan={7} className="text-center text-zinc-500 py-8">
+                <TableRow className="border-border">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No run history yet
                   </TableCell>
                 </TableRow>

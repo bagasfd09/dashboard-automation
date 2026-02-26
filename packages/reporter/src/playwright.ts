@@ -56,7 +56,7 @@ function relativeFile(test: TestCase, cwd: string): string {
  * Walk the test's parent chain and collect describe-level suite titles.
  * Returns them joined with " > " (e.g. "Auth > Login"), or undefined if no describes.
  */
-function getSuiteName(test: TestCase): string | undefined {
+export function getSuiteName(test: TestCase): string | undefined {
   const parts: string[] = [];
   let node: Suite | undefined = test.parent;
   while (node) {

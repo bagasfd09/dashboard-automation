@@ -32,10 +32,37 @@ export function useTestCases(filters: TestCaseFilters = {}, page = 1, pageSize =
 export function useGroupedTestCases(
   groupBy: 'suite' | 'filePath' | 'tag' | 'team',
   filters: TestCaseFilters = {},
+  page = 1,
+  pageSize = 10,
+  innerPageSize = 5,
 ) {
   return useQuery({
-    queryKey: ['test-cases-grouped', groupBy, filters],
-    queryFn: () => api.getTestCasesGrouped({ ...filters, groupBy }),
+    queryKey: ['test-cases-grouped', groupBy, filters, page, pageSize, innerPageSize],
+    queryFn: () =>
+      api.getTestCasesGrouped({
+        ...filters,
+        groupBy,
+        page,
+        pageSize,
+        // Only pass innerPageSize for suite groupBy (backend only uses it there)
+        innerPageSize: groupBy === 'suite' ? innerPageSize : undefined,
+      }),
+  });
+}
+
+export function useSuiteTestCases(
+  suiteName: string,
+  teamId: string | undefined,
+  page: number,
+  pageSize: number,
+  filters: TestCaseFilters = {},
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['suite-test-cases', suiteName, teamId, page, pageSize, filters],
+    queryFn: () =>
+      api.getSuiteTestCases({ suiteName, teamId, page, pageSize, ...filters }),
+    enabled,
   });
 }
 

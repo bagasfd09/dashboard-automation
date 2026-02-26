@@ -20,6 +20,19 @@ export type {
   TestResult,
   Artifact,
   RetryRequest,
+  User,
+  TeamMember,
+  RefreshToken,
+  Invite,
+  PasswordReset,
+  ActivityLog,
   Prisma,
 } from '@prisma/client';
-export { RunStatus, TestStatus, ArtifactType, RetryRequestStatus } from '@prisma/client';
+export {
+  RunStatus,
+  TestStatus,
+  ArtifactType,
+  RetryRequestStatus,
+  UserRole,
+  InviteStatus,
+} from '@prisma/client';

@@ -30,7 +30,7 @@ export function RetryButton({ testCaseId, teamId, size = 'sm' }: RetryButtonProp
 
   if (state === 'pending') {
     return (
-      <Button variant="outline" size={size} disabled className="border-yellow-700 text-yellow-400 gap-1">
+      <Button variant="outline" size={size} disabled className="border-yellow-500/50 text-yellow-600 dark:text-yellow-400 gap-1">
         <Clock className="h-3 w-3" />
         Pending…
       </Button>
@@ -39,7 +39,7 @@ export function RetryButton({ testCaseId, teamId, size = 'sm' }: RetryButtonProp
 
   if (state === 'loading') {
     return (
-      <Button variant="outline" size={size} disabled className="border-zinc-700 text-zinc-400 gap-1">
+      <Button variant="outline" size={size} disabled className="border-border text-muted-foreground gap-1">
         <Loader2 className="h-3 w-3 animate-spin" />
         Requesting…
       </Button>
@@ -51,7 +51,7 @@ export function RetryButton({ testCaseId, teamId, size = 'sm' }: RetryButtonProp
       variant="outline"
       size={size}
       onClick={handleClick}
-      className="border-zinc-700 text-zinc-300 hover:border-blue-600 hover:text-blue-400 gap-1"
+      className="border-border text-foreground/80 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 gap-1"
     >
       <RotateCcw className="h-3 w-3" />
       Retry

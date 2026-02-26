@@ -8,6 +8,10 @@
     "db:push": "turbo db:push",
     "db:generate": "turbo db:generate",
     "test:integration": "tsx tests/integration/run.ts",
+    "test:integration:flows": "tsx tests/integration/run.ts --project=flows",
+    "test:integration:menus": "tsx tests/integration/run.ts --project=menus",
+    "test:integration:smoke": "tsx tests/integration/run.ts --project=smoke",
+    "db:seed": "pnpm --filter @qc-monitor/api seed",
     "publish:reporter": "pnpm --filter @bagasfd09/qc-monitor-reporter publish"
   },
   "devDependencies": {

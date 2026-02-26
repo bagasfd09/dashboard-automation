@@ -1,21 +1,24 @@
 /**
- * Integration test setup script.
+ * Integration test setup script (standalone).
  *
- * Run from the monorepo root via:  pnpm test:integration
+ * Creates three showcase teams and writes the primary team's apiKey to
+ * tests/integration/sample-tests/.env so Playwright picks it up automatically
+ * (Playwright v1.44+ auto-loads .env).
  *
- * What this does:
- *  1. Health-checks the QC Monitor API
- *  2. Creates a fresh team (timestamped name to avoid conflicts)
- *  3. Writes QC_MONITOR_API_KEY to tests/integration/sample-tests/.env
- *     so Playwright picks it up automatically (Playwright v1.44+ auto-loads .env)
+ * Run from the monorepo root:
+ *   npx tsx tests/integration/setup.ts
+ *
+ * Then run Playwright separately:
+ *   npx playwright test --config=tests/integration/sample-tests/playwright.config.ts
  */
 
 import fs from 'fs/promises';
 import path from 'path';
 
 const API_URL = process.env['QC_MONITOR_API_URL'] ?? 'http://localhost:3001';
-// Always write .env relative to the monorepo root (script is run from there)
 const SAMPLE_DIR = path.resolve(process.cwd(), 'tests/integration/sample-tests');
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Team {
   id: string;
@@ -23,11 +26,61 @@ interface Team {
   apiKey: string;
 }
 
+const TEAM_NAMES = ['QA Web Team', 'QA Mobile Team', 'QA API Team'] as const;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function createTeam(name: string): Promise<Team> {
+  const res = await fetch(`${API_URL}/api/teams`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    const isConflict = res.status === 409 || text.includes('Unique constraint');
+    if (isConflict) {
+      throw new Error(
+        `Team "${name}" already exists.\n` +
+          `    Reset the DB with: pnpm --filter @qc-monitor/db db:push --force-reset`,
+      );
+    }
+    throw new Error(`Failed to create team "${name}": ${res.status} ${text}`);
+  }
+
+  return res.json() as Promise<Team>;
+}
+
+function printTable(teams: Team[]): void {
+  const COL1 = 18;
+  const COL2 = 29;
+  const h = '─';
+  const v = '│';
+  const tl = '┌', tr = '┐', bl = '└', br = '┘', ml = '├', mr = '┤', mc = '┼';
+
+  const row = (a: string, b: string) =>
+    `${v} ${a.padEnd(COL1)} ${v} ${b.padEnd(COL2)} ${v}`;
+  const divider = (l: string, m: string, r: string) =>
+    `${l}${h.repeat(COL1 + 2)}${m}${h.repeat(COL2 + 2)}${r}`;
+
+  console.log(`\n  ${divider(tl, '┬', tr)}`);
+  console.log(`  ${row('Team Name', 'API Key')}`);
+  console.log(`  ${divider(ml, mc, mr)}`);
+  for (const t of teams) {
+    const key = t.apiKey.length > COL2 ? t.apiKey.slice(0, COL2 - 3) + '...' : t.apiKey;
+    console.log(`  ${row(t.name, key)}`);
+  }
+  console.log(`  ${divider(bl, '┴', br)}\n`);
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
 async function main() {
   console.log('\n🔧  QC Monitor — Integration Test Setup');
   console.log(`    API: ${API_URL}\n`);
 
-  // ── 1. Health check ────────────────────────────────────────────────────────
+  // ── 1. Health check ──────────────────────────────────────────────────────────
   try {
     const res = await fetch(`${API_URL}/health`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -40,38 +93,37 @@ async function main() {
     process.exit(1);
   }
 
-  // ── 2. Create a fresh team ─────────────────────────────────────────────────
-  // Use a timestamp so re-running never hits the 409 name-conflict error.
-  const teamName = `integration-${Date.now()}`;
+  // ── 2. Create teams ──────────────────────────────────────────────────────────
+  console.log(`    Creating teams...\n`);
+  const teams: Team[] = [];
 
-  const res = await fetch(`${API_URL}/api/teams`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: teamName }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error(`\n❌  Failed to create team: ${res.status} ${text}`);
-    process.exit(1);
+  for (const name of TEAM_NAMES) {
+    try {
+      const team = await createTeam(name);
+      teams.push(team);
+      console.log(`    ✓ Created "${team.name}"`);
+    } catch (err) {
+      console.error(`\n❌  ${(err as Error).message}`);
+      process.exit(1);
+    }
   }
 
-  const team = (await res.json()) as Team;
-  console.log(`    ✓ Team created: "${team.name}"`);
-  console.log(`    ✓ apiKey: ${team.apiKey}`);
+  printTable(teams);
 
-  // ── 3. Write .env ─────────────────────────────────────────────────────────
+  // ── 3. Write primary team's apiKey to .env ───────────────────────────────────
+  const primary = teams[0]!;
   const envPath = path.join(SAMPLE_DIR, '.env');
   await fs.writeFile(
     envPath,
-    [`QC_MONITOR_API_URL=${API_URL}`, `QC_MONITOR_API_KEY=${team.apiKey}`, ''].join('\n'),
+    [`QC_MONITOR_API_URL=${API_URL}`, `QC_MONITOR_API_KEY=${primary.apiKey}`, ''].join('\n'),
     'utf8',
   );
-  console.log(`    ✓ .env written → ${envPath}`);
+  console.log(`  ✅  ${primary.name} apiKey saved to sample-tests/.env\n`);
 
-  console.log(`\n    Verify results after the run:`);
-  console.log(`      curl http://localhost:3001/api/runs \\`);
-  console.log(`           -H "x-api-key: ${team.apiKey}"\n`);
+  console.log(`    Run Playwright manually:`);
+  console.log(
+    `      npx playwright test --config=tests/integration/sample-tests/playwright.config.ts\n`,
+  );
 }
 
 main().catch((err: unknown) => {

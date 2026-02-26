@@ -23,10 +23,24 @@ export function useRuns(page = 1, pageSize = 20, teamId?: string) {
   return { ...query, prefetchNext };
 }
 
-export function useRun(id: string) {
+export function useRun(
+  id: string,
+  params?: { page?: number; pageSize?: number; status?: string; search?: string },
+) {
   return useQuery({
-    queryKey: ['run', id],
-    queryFn: () => api.getRun(id),
+    queryKey: ['run', id, params],
+    queryFn: () => api.getRun(id, params),
+    enabled: !!id,
+  });
+}
+
+export function useRunResultsGrouped(
+  id: string,
+  params?: { page?: number; pageSize?: number; innerPageSize?: number; status?: string },
+) {
+  return useQuery({
+    queryKey: ['run-results-grouped', id, params],
+    queryFn: () => api.getRunResultsGrouped(id, params),
     enabled: !!id,
   });
 }

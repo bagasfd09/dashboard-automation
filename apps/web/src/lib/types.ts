@@ -37,10 +37,14 @@ export interface TestCaseGroup {
   name: string;
   testCases: TestCase[];
   stats: TestCaseGroupStats;
+  /** Inner pagination — present when innerPageSize is specified */
+  pagination: PaginationMeta;
 }
 
 export interface GroupedTestCases {
   groups: TestCaseGroup[];
+  /** Outer group-level pagination */
+  pagination: PaginationMeta;
 }
 
 export type RetryRequestStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'EXPIRED';
@@ -100,8 +104,105 @@ export interface TestCaseDetail extends TestCase {
   results: (TestResult & { artifacts: Artifact[] })[];
 }
 
+/** Legacy — still used by reporter/team routes */
 export interface RunDetail extends TestRun {
   results: (TestResult & { testCase: TestCase; artifacts: Artifact[] })[];
+}
+
+/** Paginated run detail returned by GET /api/admin/runs/:id */
+export interface RunDetailPaginated {
+  run: TestRun & { team?: { id: string; name: string } };
+  results: {
+    data: (TestResult & { testCase: TestCase; artifacts: Artifact[] })[];
+    pagination: PaginationMeta;
+  };
+}
+
+export interface RunResultGroup {
+  suiteName: string;
+  results: (TestResult & { testCase: TestCase; artifacts: Artifact[] })[];
+  stats: { total: number; passed: number; failed: number; skipped: number };
+  pagination: PaginationMeta;
+}
+
+export interface RunResultsGrouped {
+  run: TestRun & { team?: { id: string; name: string } };
+  groups: RunResultGroup[];
+  pagination: PaginationMeta;
+}
+
+// ── Auth / User types ─────────────────────────────────────────────────────────
+
+export type UserRole = 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'TEAM_LEAD' | 'MEMBER' | 'MONITORING';
+
+export interface RolePermissions {
+  dataScope: 'ALL_TEAMS' | 'OWN_TEAMS' | 'ASSIGNED_TEAMS';
+  canCreateTeams: boolean;
+  canDeleteTeams: boolean;
+  canManageApiKeys: boolean;
+  canRevokeApiKeys: boolean;
+  canTriggerRetry: boolean;
+  canViewActivityLog: boolean;
+  canForceLogout: boolean;
+  canInviteRoles: UserRole[];
+}
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  mustChangePass: boolean;
+  teams: { id: string; name: string }[];
+  permissions?: RolePermissions;
+}
+
+export interface LoginResponse {
+  accessToken: string;
+  user: AuthUser;
+}
+
+export interface Session {
+  id: string;
+  deviceInfo: string | null;
+  createdAt: string;
+  expiresAt: string;
+  current: boolean;
+}
+
+export interface UserRecord {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  mustChangePass?: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  teams: { id: string; name: string }[];
+}
+
+export interface ActivityLogEntry {
+  id: string;
+  userId: string;
+  teamId: string | null;
+  action: string;
+  details: string | null;
+  createdAt: string;
+  user?: { id: string; name: string; email: string };
+  team?: { id: string; name: string } | null;
+}
+
+export interface InviteRecord {
+  id: string;
+  email: string;
+  role: UserRole;
+  teamIds: string[];
+  token: string;
+  status: 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
+  expiresAt: string;
+  createdAt: string;
+  invitedBy?: { id: string; name: string };
 }
 
 // ── Admin types ───────────────────────────────────────────────────────────────

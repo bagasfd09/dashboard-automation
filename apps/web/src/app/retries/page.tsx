@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RetriesSkeleton } from '@/components/skeletons';
 import type { RetryRequestStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -24,10 +25,10 @@ function formatDate(iso?: string) {
 
 function RetryStatusBadge({ status }: { status: RetryRequestStatus }) {
   const classes: Record<RetryRequestStatus, string> = {
-    PENDING: 'bg-yellow-500/10 text-yellow-400 border-yellow-700',
-    RUNNING: 'bg-blue-500/10 text-blue-400 border-blue-700',
-    COMPLETED: 'bg-green-500/10 text-green-400 border-green-800',
-    EXPIRED: 'bg-zinc-700/40 text-zinc-500 border-zinc-700',
+    PENDING:   'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-700',
+    RUNNING:   'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-700',
+    COMPLETED: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-800',
+    EXPIRED:   'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-700/40 dark:text-zinc-500 dark:border-zinc-700',
   };
 
   return (
@@ -38,7 +39,7 @@ function RetryStatusBadge({ status }: { status: RetryRequestStatus }) {
       )}
     >
       {status === 'RUNNING' && (
-        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping inline-block" />
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping inline-block" />
       )}
       {status}
     </span>
@@ -71,65 +72,65 @@ function RetriesPageContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Retries</h1>
-        <p className="text-zinc-400 text-sm mt-1">
+        <h1 className="text-2xl font-bold text-foreground">Retries</h1>
+        <p className="text-muted-foreground text-sm mt-1">
           {data
             ? `${data.pagination.totalItems} retry request${data.pagination.totalItems !== 1 ? 's' : ''}`
             : 'Loading…'}
         </p>
       </div>
 
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-white text-base">Retry Requests</CardTitle>
+          <CardTitle className="text-foreground text-base">Retry Requests</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-400">Test Case</TableHead>
-                <TableHead className="text-zinc-400">Team</TableHead>
-                <TableHead className="text-zinc-400">Status</TableHead>
-                <TableHead className="text-zinc-400">Requested</TableHead>
-                <TableHead className="text-zinc-400">Completed</TableHead>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Test Case</TableHead>
+                <TableHead className="text-muted-foreground">Team</TableHead>
+                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="text-muted-foreground">Requested</TableHead>
+                <TableHead className="text-muted-foreground">Completed</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading
                 ? Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i} className="border-zinc-800">
+                    <TableRow key={i} className="border-border">
                       {Array.from({ length: 5 }).map((_, j) => (
                         <TableCell key={j}>
-                          <Skeleton className="h-4 w-24 bg-zinc-800" />
+                          <Skeleton className="h-4 w-24 bg-muted" />
                         </TableCell>
                       ))}
                     </TableRow>
                   ))
                 : data?.data.map((r) => (
-                    <TableRow key={r.id} className="border-zinc-800 hover:bg-zinc-800/40">
-                      <TableCell className="text-zinc-100 text-sm max-w-xs">
+                    <TableRow key={r.id} className="border-border hover:bg-muted/40">
+                      <TableCell className="text-foreground text-sm max-w-xs">
                         <div className="truncate font-medium" title={r.testCase.title}>
                           {r.testCase.title}
                         </div>
-                        <code className="text-xs text-zinc-500 truncate block">
+                        <code className="text-xs text-muted-foreground truncate block">
                           {r.testCase.filePath}
                         </code>
                       </TableCell>
-                      <TableCell className="text-zinc-300 text-sm">{r.team.name}</TableCell>
+                      <TableCell className="text-foreground/80 text-sm">{r.team.name}</TableCell>
                       <TableCell>
                         <RetryStatusBadge status={r.status} />
                       </TableCell>
-                      <TableCell className="text-zinc-400 text-xs whitespace-nowrap">
+                      <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
                         {formatDate(r.requestedAt)}
                       </TableCell>
-                      <TableCell className="text-zinc-400 text-xs whitespace-nowrap">
+                      <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
                         {formatDate(r.completedAt)}
                       </TableCell>
                     </TableRow>
                   ))}
               {!isLoading && data?.data.length === 0 && (
-                <TableRow className="border-zinc-800">
-                  <TableCell colSpan={5} className="text-center text-zinc-500 py-8">
+                <TableRow className="border-border">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     No retry requests yet
                   </TableCell>
                 </TableRow>
@@ -154,18 +155,9 @@ function RetriesPageContent() {
   );
 }
 
-function RetriesPageSkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-8 w-24 bg-zinc-800" />
-      <Skeleton className="h-64 bg-zinc-800 rounded-lg" />
-    </div>
-  );
-}
-
 export default function RetriesPage() {
   return (
-    <Suspense fallback={<RetriesPageSkeleton />}>
+    <Suspense fallback={<RetriesSkeleton />}>
       <RetriesPageContent />
     </Suspense>
   );

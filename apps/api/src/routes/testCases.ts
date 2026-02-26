@@ -84,6 +84,7 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
                   title: { type: 'string', minLength: 1 },
                   filePath: { type: 'string', minLength: 1 },
                   tags: { type: 'array', items: { type: 'string' } },
+                  suiteName: { type: 'string' },
                 },
               },
             },
@@ -94,7 +95,7 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       if (!request.team) return reply.code(401).send({ error: 'API key required', statusCode: 401 });
       const { testCases } = request.body as {
-        testCases: { title: string; filePath: string; tags?: string[] }[];
+        testCases: { title: string; filePath: string; tags?: string[]; suiteName?: string }[];
       };
       try {
         const synced = await testCaseService.syncTestCases(request.team.id, testCases);

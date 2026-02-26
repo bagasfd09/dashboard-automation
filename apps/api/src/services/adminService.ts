@@ -15,9 +15,13 @@ export interface TeamSummary {
   passRate: number;
 }
 
-export async function listTeamsWithStats(): Promise<TeamSummary[]> {
+export async function listTeamsWithStats(teamIds?: string[]): Promise<TeamSummary[]> {
+  const where = teamIds ? { id: { in: teamIds } } : {};
+  const teamFilter = teamIds ? { teamId: { in: teamIds } } : {};
+
   const [teams, runAggs] = await Promise.all([
     prisma.team.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { testCases: true, testRuns: true } },
@@ -30,6 +34,7 @@ export async function listTeamsWithStats(): Promise<TeamSummary[]> {
     }),
     prisma.testRun.groupBy({
       by: ['teamId'],
+      where: teamIds ? { teamId: { in: teamIds } } : undefined,
       _sum: { passed: true, totalTests: true },
     }),
   ]);
@@ -82,9 +87,13 @@ export interface OverviewStats {
   recentActivity: RecentActivityItem[];
 }
 
-export async function getOverview(): Promise<OverviewStats> {
+export async function getOverview(teamIds?: string[]): Promise<OverviewStats> {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
+
+  const teamWhere = teamIds ? { id: { in: teamIds } } : {};
+  const runWhere = teamIds ? { teamId: { in: teamIds } } : {};
+  const tcWhere = teamIds ? { teamId: { in: teamIds } } : {};
 
   const [
     totalTeams,
@@ -95,18 +104,20 @@ export async function getOverview(): Promise<OverviewStats> {
     sumsRaw,
     recentRaw,
   ] = await Promise.all([
-    prisma.team.count(),
-    prisma.testCase.count(),
-    prisma.testRun.count(),
-    prisma.testRun.count({ where: { startedAt: { gte: todayStart } } }),
+    prisma.team.count({ where: teamWhere }),
+    prisma.testCase.count({ where: tcWhere }),
+    prisma.testRun.count({ where: runWhere }),
+    prisma.testRun.count({ where: { ...runWhere, startedAt: { gte: todayStart } } }),
     prisma.testRun.groupBy({
       by: ['status'],
+      where: runWhere,
       _count: { id: true },
     }),
-    prisma.testRun.aggregate({ _sum: { passed: true, totalTests: true } }),
+    prisma.testRun.aggregate({ where: runWhere, _sum: { passed: true, totalTests: true } }),
     prisma.testResult.findMany({
       orderBy: { startedAt: 'desc' },
       take: 10,
+      where: teamIds ? { testRun: { teamId: { in: teamIds } } } : {},
       include: {
         testCase: { select: { title: true } },
         testRun: {
@@ -231,7 +242,6 @@ export async function getTeamDetailStats(teamId: string): Promise<TeamDetailStat
     }),
   ]);
 
-  // Resolve top failing test case titles in one query
   const topIds = topFailingRaw.map((r) => r.testCaseId);
   const topTestCases =
     topIds.length > 0
@@ -262,7 +272,61 @@ export async function getTeamDetailStats(teamId: string): Promise<TeamDetailStat
   };
 }
 
-// ── Admin artifact download (no team restriction) ─────────────────────────────
+// ── Activity log ──────────────────────────────────────────────────────────────
+
+export async function listActivityLog(filters: {
+  teamId?: string;
+  userId?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+  scopeTeamIds?: string[];
+}) {
+  const { teamId, userId, action, from, to, scopeTeamIds } = filters;
+  const page = Number(filters.page ?? 1);
+  const pageSize = Number(filters.pageSize ?? 20);
+  const skip = (page - 1) * pageSize;
+
+  const where: Record<string, unknown> = {};
+  if (userId) where['userId'] = userId;
+  if (action) where['action'] = { contains: action };
+  if (teamId) {
+    where['teamId'] = teamId;
+  } else if (scopeTeamIds) {
+    where['teamId'] = { in: scopeTeamIds };
+  }
+  if (from || to) {
+    where['createdAt'] = {
+      ...(from ? { gte: new Date(from) } : {}),
+      ...(to ? { lte: new Date(to) } : {}),
+    };
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.activityLog.findMany({
+      where,
+      skip,
+      take: pageSize,
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    }),
+    prisma.activityLog.count({ where }),
+  ]);
+
+  return {
+    data: items,
+    pagination: {
+      page,
+      pageSize,
+      totalItems: total,
+      totalPages: Math.ceil(total / pageSize) || 1,
+    },
+  };
+}
+
+// ── Admin artifact download ───────────────────────────────────────────────────
 
 export async function getAdminArtifactDownloadUrl(
   id: string,

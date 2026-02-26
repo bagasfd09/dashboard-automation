@@ -41,11 +41,11 @@ function SummaryCard({ label, value, sub, valueClass }: {
   valueClass?: string;
 }) {
   return (
-    <Card className="bg-zinc-900 border-zinc-800">
+    <Card className="bg-card border-border">
       <CardContent className="pt-4 pb-4">
-        <p className="text-zinc-400 text-xs uppercase tracking-wide">{label}</p>
-        <p className={cn('text-2xl font-bold mt-1', valueClass ?? 'text-white')}>{value}</p>
-        {sub && <p className="text-zinc-500 text-xs mt-0.5">{sub}</p>}
+        <p className="text-muted-foreground text-xs uppercase tracking-wide">{label}</p>
+        <p className={cn('text-2xl font-bold mt-1', valueClass ?? 'text-foreground')}>{value}</p>
+        {sub && <p className="text-muted-foreground text-xs mt-0.5">{sub}</p>}
       </CardContent>
     </Card>
   );
@@ -54,15 +54,15 @@ function SummaryCard({ label, value, sub, valueClass }: {
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <Skeleton className="h-6 w-48 bg-zinc-800" />
+      <Skeleton className="h-6 w-48 bg-muted" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 bg-zinc-800 rounded-lg" />
+          <Skeleton key={i} className="h-20 bg-muted rounded-lg" />
         ))}
       </div>
       <div className="space-y-2">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 bg-zinc-800 rounded" />
+          <Skeleton key={i} className="h-12 bg-muted rounded" />
         ))}
       </div>
     </div>
@@ -78,9 +78,9 @@ export default function TeamDetailPage() {
 
   if (!stats) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-zinc-500">
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
         <p className="text-lg font-medium">Team not found</p>
-        <Link href="/teams" className="mt-2 text-sm text-blue-400 hover:underline">
+        <Link href="/teams" className="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline">
           Back to teams
         </Link>
       </div>
@@ -95,12 +95,12 @@ export default function TeamDetailPage() {
       <div className="flex items-center gap-2 text-sm">
         <Link
           href="/teams"
-          className="flex items-center gap-1 text-zinc-400 hover:text-zinc-200 transition-colors"
+          className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="h-4 w-4" />
           Teams
         </Link>
-        <span className="text-zinc-600">/</span>
+        <span className="text-muted-foreground/60">/</span>
         <span
           className={cn(
             'inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium',
@@ -124,10 +124,10 @@ export default function TeamDetailPage() {
           value={runs.total > 0 ? `${runs.passRate}%` : '—'}
           valueClass={
             runs.passRate >= 80
-              ? 'text-green-400'
+              ? 'text-green-600 dark:text-green-400'
               : runs.passRate >= 50
-              ? 'text-amber-400'
-              : 'text-red-400'
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-red-600 dark:text-red-400'
           }
         />
         <SummaryCard
@@ -138,22 +138,22 @@ export default function TeamDetailPage() {
 
       {/* Test case health */}
       <div className="grid grid-cols-3 gap-4">
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-card border-border">
           <CardContent className="pt-4 pb-4 flex items-center justify-between">
-            <span className="text-zinc-400 text-xs">With Failures</span>
-            <span className="text-lg font-bold text-red-400">{testCases.withFailures}</span>
+            <span className="text-muted-foreground text-xs">With Failures</span>
+            <span className="text-lg font-bold text-red-600 dark:text-red-400">{testCases.withFailures}</span>
           </CardContent>
         </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-card border-border">
           <CardContent className="pt-4 pb-4 flex items-center justify-between">
-            <span className="text-zinc-400 text-xs">Never Run</span>
-            <span className="text-lg font-bold text-zinc-400">{testCases.withoutRuns}</span>
+            <span className="text-muted-foreground text-xs">Never Run</span>
+            <span className="text-lg font-bold text-muted-foreground">{testCases.withoutRuns}</span>
           </CardContent>
         </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-card border-border">
           <CardContent className="pt-4 pb-4 flex items-center justify-between">
-            <span className="text-zinc-400 text-xs">Healthy</span>
-            <span className="text-lg font-bold text-green-400">
+            <span className="text-muted-foreground text-xs">Healthy</span>
+            <span className="text-lg font-bold text-green-600 dark:text-green-400">
               {testCases.total - testCases.withFailures - testCases.withoutRuns}
             </span>
           </CardContent>
@@ -162,27 +162,27 @@ export default function TeamDetailPage() {
 
       {/* Top failing tests */}
       {topFailingTests.length > 0 && (
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-card border-border">
           <CardHeader>
-            <CardTitle className="text-white text-base flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-400" />
+            <CardTitle className="text-foreground text-base flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-500" />
               Top Failing Tests
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow className="border-zinc-800 hover:bg-transparent">
-                  <TableHead className="text-zinc-400">Test Case</TableHead>
-                  <TableHead className="text-zinc-400 text-right">Failures</TableHead>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="text-muted-foreground">Test Case</TableHead>
+                  <TableHead className="text-muted-foreground text-right">Failures</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {topFailingTests.map((test) => (
-                  <TableRow key={test.id} className="border-zinc-800 hover:bg-zinc-800/40">
-                    <TableCell className="text-zinc-200 text-sm">{test.title}</TableCell>
+                  <TableRow key={test.id} className="border-border hover:bg-muted/40">
+                    <TableCell className="text-foreground/90 text-sm">{test.title}</TableCell>
                     <TableCell className="text-right">
-                      <span className="text-red-400 font-medium text-sm">{test.failureCount}</span>
+                      <span className="text-red-600 dark:text-red-400 font-medium text-sm">{test.failureCount}</span>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -193,12 +193,12 @@ export default function TeamDetailPage() {
       )}
 
       {/* Recent runs */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-card border-border">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white text-base">Recent Runs</CardTitle>
+            <CardTitle className="text-foreground text-base">Recent Runs</CardTitle>
             <button
-              className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+              className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
               onClick={() => router.push(`/runs?teamId=${team.id}`)}
             >
               View all →
@@ -208,19 +208,19 @@ export default function TeamDetailPage() {
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-400">Run ID</TableHead>
-                <TableHead className="text-zinc-400">Status</TableHead>
-                <TableHead className="text-zinc-400">Passed</TableHead>
-                <TableHead className="text-zinc-400">Failed</TableHead>
-                <TableHead className="text-zinc-400">Duration</TableHead>
-                <TableHead className="text-zinc-400">Started</TableHead>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Run ID</TableHead>
+                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="text-muted-foreground">Passed</TableHead>
+                <TableHead className="text-muted-foreground">Failed</TableHead>
+                <TableHead className="text-muted-foreground">Duration</TableHead>
+                <TableHead className="text-muted-foreground">Started</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {recentRuns.length === 0 ? (
-                <TableRow className="border-zinc-800">
-                  <TableCell colSpan={6} className="text-center text-zinc-500 py-8">
+                <TableRow className="border-border">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     No runs yet
                   </TableCell>
                 </TableRow>
@@ -228,21 +228,21 @@ export default function TeamDetailPage() {
                 recentRuns.map((run) => (
                   <TableRow
                     key={run.id}
-                    className="border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
+                    className="border-border hover:bg-muted/50 cursor-pointer"
                     onClick={() => router.push(`/runs/${run.id}`)}
                   >
-                    <TableCell className="font-mono text-xs text-zinc-300">
+                    <TableCell className="font-mono text-xs text-foreground/80">
                       {run.id.slice(0, 8)}
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={run.status as RunStatus} type="run" />
                     </TableCell>
-                    <TableCell className="text-green-400 text-sm">{run.passed}</TableCell>
-                    <TableCell className="text-red-400 text-sm">{run.failed}</TableCell>
-                    <TableCell className="text-zinc-400 text-sm">
+                    <TableCell className="text-green-600 dark:text-green-400 text-sm">{run.passed}</TableCell>
+                    <TableCell className="text-red-600 dark:text-red-400 text-sm">{run.failed}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
                       {formatDuration(run.duration)}
                     </TableCell>
-                    <TableCell className="text-zinc-400 text-xs">
+                    <TableCell className="text-muted-foreground text-xs">
                       {formatDate(run.startedAt)}
                     </TableCell>
                   </TableRow>
@@ -257,14 +257,14 @@ export default function TeamDetailPage() {
       <div className="flex gap-3 text-sm">
         <Link
           href={`/test-cases?teamId=${team.id}`}
-          className="text-blue-400 hover:text-blue-300 transition-colors"
+          className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
         >
           → View all test cases for this team
         </Link>
-        <span className="text-zinc-700">·</span>
+        <span className="text-muted-foreground/40">·</span>
         <Link
           href={`/runs?teamId=${team.id}`}
-          className="text-blue-400 hover:text-blue-300 transition-colors"
+          className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
         >
           → View all runs for this team
         </Link>

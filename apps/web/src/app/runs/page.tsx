@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RunsSkeleton } from '@/components/skeletons';
 import { teamColorClass } from '@/lib/team-colors';
 import { cn } from '@/lib/utils';
 import type { RunStatus } from '@/lib/types';
@@ -49,7 +50,7 @@ function RunProgressBar({ passed, failed, total }: { passed: number; failed: num
   const failedPct = Math.round((failed / total) * 100);
 
   return (
-    <div className="flex h-1.5 rounded-full overflow-hidden bg-zinc-700 w-24 mt-1">
+    <div className="flex h-1.5 rounded-full overflow-hidden bg-muted w-24 mt-1">
       <div className="bg-green-500 transition-all" style={{ width: `${passedPct}%` }} />
       <div className="bg-red-500 transition-all" style={{ width: `${failedPct}%` }} />
     </div>
@@ -104,8 +105,8 @@ function RunsPageContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Test Runs</h1>
-        <p className="text-zinc-400 text-sm mt-1">
+        <h1 className="text-2xl font-bold text-foreground">Test Runs</h1>
+        <p className="text-muted-foreground text-sm mt-1">
           {data ? `${data.pagination.totalItems} total runs` : 'Loading…'}
         </p>
       </div>
@@ -113,13 +114,13 @@ function RunsPageContent() {
       {/* Team filter */}
       <div className="flex gap-3">
         <Select onValueChange={onTeamChange} value={teamId ?? 'all'}>
-          <SelectTrigger className="w-44 bg-zinc-900 border-zinc-700 text-zinc-100">
+          <SelectTrigger className="w-44 bg-card border-border text-foreground">
             <SelectValue placeholder="All teams" />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
-            <SelectItem value="all" className="focus:bg-zinc-800">All teams</SelectItem>
+          <SelectContent className="bg-card border-border text-foreground">
+            <SelectItem value="all" className="focus:bg-muted">All teams</SelectItem>
             {teams?.map((team) => (
-              <SelectItem key={team.id} value={team.id} className="focus:bg-zinc-800">
+              <SelectItem key={team.id} value={team.id} className="focus:bg-muted">
                 {team.name}
               </SelectItem>
             ))}
@@ -127,32 +128,32 @@ function RunsPageContent() {
         </Select>
       </div>
 
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-white text-base">All Runs</CardTitle>
+          <CardTitle className="text-foreground text-base">All Runs</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-400">Run ID</TableHead>
-                <TableHead className="text-zinc-400">Team</TableHead>
-                <TableHead className="text-zinc-400">Status</TableHead>
-                <TableHead className="text-zinc-400">Total</TableHead>
-                <TableHead className="text-zinc-400">Passed</TableHead>
-                <TableHead className="text-zinc-400">Failed</TableHead>
-                <TableHead className="text-zinc-400">Skipped</TableHead>
-                <TableHead className="text-zinc-400">Duration</TableHead>
-                <TableHead className="text-zinc-400">Started At</TableHead>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Run ID</TableHead>
+                <TableHead className="text-muted-foreground">Team</TableHead>
+                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="text-muted-foreground">Total</TableHead>
+                <TableHead className="text-muted-foreground">Passed</TableHead>
+                <TableHead className="text-muted-foreground">Failed</TableHead>
+                <TableHead className="text-muted-foreground">Skipped</TableHead>
+                <TableHead className="text-muted-foreground">Duration</TableHead>
+                <TableHead className="text-muted-foreground">Started At</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading
                 ? Array.from({ length: pageSize > 10 ? 10 : pageSize }).map((_, i) => (
-                    <TableRow key={i} className="border-zinc-800">
+                    <TableRow key={i} className="border-border">
                       {Array.from({ length: 9 }).map((_, j) => (
                         <TableCell key={j}>
-                          <Skeleton className="h-4 w-16 bg-zinc-800" />
+                          <Skeleton className="h-4 w-16 bg-muted" />
                         </TableCell>
                       ))}
                     </TableRow>
@@ -160,10 +161,10 @@ function RunsPageContent() {
                 : data?.data.map((run) => (
                     <TableRow
                       key={run.id}
-                      className="border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
+                      className="border-border hover:bg-muted/50 cursor-pointer"
                       onClick={() => router.push(`/runs/${run.id}`)}
                     >
-                      <TableCell className="font-mono text-xs text-zinc-300">
+                      <TableCell className="font-mono text-xs text-foreground/80">
                         {run.id.slice(0, 8)}
                       </TableCell>
                       <TableCell>
@@ -177,7 +178,7 @@ function RunsPageContent() {
                             {run.team.name}
                           </span>
                         ) : (
-                          <span className="text-zinc-600 text-xs">—</span>
+                          <span className="text-muted-foreground/60 text-xs">—</span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -192,21 +193,21 @@ function RunsPageContent() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-zinc-300 text-sm">{run.totalTests}</TableCell>
-                      <TableCell className="text-green-400 text-sm">{run.passed}</TableCell>
-                      <TableCell className="text-red-400 text-sm">{run.failed}</TableCell>
-                      <TableCell className="text-zinc-400 text-sm">{run.skipped}</TableCell>
-                      <TableCell className="text-zinc-400 text-sm">
+                      <TableCell className="text-foreground/80 text-sm">{run.totalTests}</TableCell>
+                      <TableCell className="text-green-600 dark:text-green-400 text-sm">{run.passed}</TableCell>
+                      <TableCell className="text-red-600 dark:text-red-400 text-sm">{run.failed}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{run.skipped}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
                         {formatDuration(run.duration)}
                       </TableCell>
-                      <TableCell className="text-zinc-400 text-xs">
+                      <TableCell className="text-muted-foreground text-xs">
                         {formatDate(run.startedAt)}
                       </TableCell>
                     </TableRow>
                   ))}
               {!isLoading && data?.data.length === 0 && (
-                <TableRow className="border-zinc-800">
-                  <TableCell colSpan={9} className="text-center text-zinc-500 py-12">
+                <TableRow className="border-border">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                     <div className="space-y-1">
                       <p className="font-medium">No runs yet</p>
                       <p className="text-xs">Runs will appear here once your tests execute.</p>
@@ -234,19 +235,9 @@ function RunsPageContent() {
   );
 }
 
-function RunsPageSkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-8 w-32 bg-zinc-800" />
-      <Skeleton className="h-10 w-44 bg-zinc-800" />
-      <Skeleton className="h-64 bg-zinc-800 rounded-lg" />
-    </div>
-  );
-}
-
 export default function RunsPage() {
   return (
-    <Suspense fallback={<RunsPageSkeleton />}>
+    <Suspense fallback={<RunsSkeleton />}>
       <RunsPageContent />
     </Suspense>
   );

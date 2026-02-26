@@ -1,30 +1,76 @@
+import 'dotenv/config';
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
+import { prisma, UserRole } from '@qc-monitor/db';
+import { hashPassword } from '../services/auth.service.js';
 
-const key = crypto.randomBytes(32).toString('hex');
+function generatePassword(length = 16): string {
+  const lower = 'abcdefghijklmnopqrstuvwxyz';
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const digits = '0123456789';
+  const special = '!@#$%^&*';
+  const all = lower + upper + digits + special;
 
-// Write to .env in the api package directory (where this script is run from)
-const envPath = path.join(process.cwd(), '.env');
+  // Ensure at least one of each required character type
+  const required = [
+    lower[crypto.randomInt(lower.length)],
+    upper[crypto.randomInt(upper.length)],
+    digits[crypto.randomInt(digits.length)],
+    special[crypto.randomInt(special.length)],
+  ];
 
-let content = '';
-if (fs.existsSync(envPath)) {
-  content = fs.readFileSync(envPath, 'utf-8');
+  const remaining = Array.from({ length: length - required.length }, () =>
+    all[crypto.randomInt(all.length)],
+  );
+
+  return [...required, ...remaining]
+    .sort(() => crypto.randomInt(3) - 1)
+    .join('');
 }
 
-if (content.includes('ADMIN_SECRET_KEY=')) {
-  content = content.replace(/^ADMIN_SECRET_KEY=.*/m, `ADMIN_SECRET_KEY=${key}`);
-} else {
-  content = content.trimEnd() + `\nADMIN_SECRET_KEY=${key}\n`;
+async function seedAdmin() {
+  const email =
+    process.env.DEFAULT_ADMIN_EMAIL ?? 'admin@qc-monitor.com';
+  const name = process.env.DEFAULT_ADMIN_NAME ?? 'System Admin';
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+
+  if (existing) {
+    console.log(`\nAdmin user already exists: ${email} — skipping seed.\n`);
+    await prisma.$disconnect();
+    return;
+  }
+
+  const password = generatePassword(16);
+  const hashedPassword = await hashPassword(password);
+
+  await prisma.user.create({
+    data: {
+      email,
+      name,
+      password: hashedPassword,
+      role: UserRole.ADMIN,
+      mustChangePass: true,
+    },
+  });
+
+  const w = 56;
+  const pad = (s: string) => s + ' '.repeat(Math.max(0, w - s.length));
+
+  console.log('\n' + '╔' + '═'.repeat(w) + '╗');
+  console.log('║' + pad('  🔐 Default Super Admin Created') + '║');
+  console.log('╠' + '═'.repeat(w) + '╣');
+  console.log('║' + pad(`  Email:    ${email}`) + '║');
+  console.log('║' + pad(`  Password: ${password}`) + '║');
+  console.log('║' + pad('') + '║');
+  console.log(
+    '║' + pad('  ⚠️  You MUST change this password on first login!') + '║',
+  );
+  console.log('╚' + '═'.repeat(w) + '╝\n');
+
+  await prisma.$disconnect();
 }
 
-fs.writeFileSync(envPath, content);
-
-console.log('');
-console.log('✓ Generated ADMIN_SECRET_KEY');
-console.log(`  Key   : ${key}`);
-console.log(`  Saved : ${envPath}`);
-console.log('');
-console.log('Add this to your dashboard .env.local:');
-console.log(`  NEXT_PUBLIC_ADMIN_KEY=${key}`);
-console.log('');
+seedAdmin().catch((err) => {
+  console.error('Seed failed:', err);
+  prisma.$disconnect().finally(() => process.exit(1));
+});
