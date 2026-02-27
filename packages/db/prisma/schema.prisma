@@ -8,14 +8,16 @@ datasource db {
 }
 
 model Team {
-  id            String         @id @default(cuid())
-  name          String         @unique
-  apiKey        String         @unique @default(cuid())
+  id            String              @id @default(cuid())
+  name          String              @unique
+  apiKey        String              @unique @default(cuid())
   testCases     TestCase[]
   testRuns      TestRun[]
   retryRequests RetryRequest[]
   teamMembers   TeamMember[]
-  createdAt     DateTime       @default(now())
+  collections   LibraryCollection[]
+  releases      Release[]
+  createdAt     DateTime            @default(now())
 }
 
 model User {
@@ -30,11 +32,21 @@ model User {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  teamMembers    TeamMember[]
-  invitesSent    Invite[]        @relation("InviteSender")
-  activityLogs   ActivityLog[]
-  refreshTokens  RefreshToken[]
-  passwordResets PasswordReset[]
+  teamMembers              TeamMember[]
+  invitesSent              Invite[]                 @relation("InviteSender")
+  activityLogs             ActivityLog[]
+  refreshTokens            RefreshToken[]
+  passwordResets           PasswordReset[]
+  collections              LibraryCollection[]      @relation("CollectionCreator")
+  libraryTestCasesCreated  LibraryTestCase[]        @relation("LibraryTestCaseCreator")
+  libraryTestCasesUpdated  LibraryTestCase[]        @relation("LibraryTestCaseUpdater")
+  libraryVersions          LibraryTestCaseVersion[] @relation("LibraryVersionCreator")
+  suggestions              LibrarySuggestion[]      @relation("SuggestionCreator")
+  suggestionsReviewed      LibrarySuggestion[]      @relation("SuggestionReviewer")
+  discussions              LibraryDiscussion[]      @relation("DiscussionCreator")
+  bookmarks                LibraryBookmark[]
+  releasesCreated          Release[]                @relation("ReleaseCreator")
+  checklistAssignments     ReleaseChecklistItem[]   @relation("ChecklistAssignee")
 }
 
 model TeamMember {
@@ -123,17 +135,19 @@ enum InviteStatus {
 }
 
 model TestCase {
-  id            String         @id @default(cuid())
+  id            String                 @id @default(cuid())
   title         String
   filePath      String
   suiteName     String?
   tags          String[]
   teamId        String
-  team          Team           @relation(fields: [teamId], references: [id])
+  team          Team                   @relation(fields: [teamId], references: [id])
   results       TestResult[]
   retryRequests RetryRequest[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  libraryLinks  LibraryTestCaseLink[]
+  checklistItems ReleaseChecklistItem[] @relation("ChecklistTestCase")
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
 
   @@unique([teamId, filePath, title])
   @@index([teamId])
@@ -143,18 +157,19 @@ model TestCase {
 }
 
 model TestRun {
-  id          String       @id @default(cuid())
+  id          String           @id @default(cuid())
   teamId      String
-  team        Team         @relation(fields: [teamId], references: [id])
-  status      RunStatus    @default(RUNNING)
+  team        Team             @relation(fields: [teamId], references: [id])
+  status      RunStatus        @default(RUNNING)
   results     TestResult[]
-  totalTests  Int          @default(0)
-  passed      Int          @default(0)
-  failed      Int          @default(0)
-  skipped     Int          @default(0)
+  totalTests  Int              @default(0)
+  passed      Int              @default(0)
+  failed      Int              @default(0)
+  skipped     Int              @default(0)
   duration    Int?
-  startedAt   DateTime     @default(now())
+  startedAt   DateTime         @default(now())
   finishedAt  DateTime?
+  releases    ReleaseTestRun[]
 
   @@index([teamId])
   @@index([teamId, status])
@@ -240,4 +255,277 @@ enum RetryRequestStatus {
   RUNNING
   COMPLETED
   EXPIRED
+}
+
+// ── Library enums ──────────────────────────────────────────────────────────────
+
+enum TestPriority {
+  P0
+  P1
+  P2
+  P3
+}
+
+enum TestDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  COMPLEX
+}
+
+enum LibraryTestCaseStatus {
+  DRAFT
+  ACTIVE
+  DEPRECATED
+  ARCHIVED
+}
+
+enum SuggestionType {
+  IMPROVEMENT
+  BUG_REPORT
+  UPDATE
+  OBSOLETE
+}
+
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// ── Release enums ─────────────────────────────────────────────────────────────
+
+enum ReleaseStatus {
+  DRAFT
+  IN_PROGRESS
+  BLOCKED
+  RELEASED
+  CANCELLED
+}
+
+enum ChecklistItemType {
+  MANUAL_TEST
+  AUTOMATED_TEST
+  DEPLOYMENT
+  VERIFICATION
+  SIGN_OFF
+}
+
+enum ChecklistItemStatus {
+  PENDING
+  IN_PROGRESS
+  PASSED
+  FAILED
+  BLOCKED
+  SKIPPED
+}
+
+// ── Library models ─────────────────────────────────────────────────────────────
+
+model LibraryCollection {
+  id          String            @id @default(cuid())
+  name        String
+  description String?
+  icon        String?
+  teamId      String?
+  team        Team?             @relation(fields: [teamId], references: [id])
+  createdById String
+  createdBy   User              @relation("CollectionCreator", fields: [createdById], references: [id])
+  testCases   LibraryTestCase[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([teamId])
+  @@index([createdById])
+}
+
+model LibraryTestCase {
+  id              String                   @id @default(cuid())
+  title           String
+  description     String?
+  priority        TestPriority             @default(P2)
+  difficulty      TestDifficulty           @default(MEDIUM)
+  status          LibraryTestCaseStatus    @default(DRAFT)
+  collectionId    String?
+  collection      LibraryCollection?       @relation(fields: [collectionId], references: [id])
+  tags            String[]
+  steps           String?
+  preconditions   String?
+  expectedOutcome String?
+  createdById     String
+  createdBy       User                     @relation("LibraryTestCaseCreator", fields: [createdById], references: [id])
+  updatedById     String?
+  updatedBy       User?                    @relation("LibraryTestCaseUpdater", fields: [updatedById], references: [id])
+  versions        LibraryTestCaseVersion[]
+  dependencies    LibraryDependency[]      @relation("DependencySource")
+  dependents      LibraryDependency[]      @relation("DependencyTarget")
+  suggestions     LibrarySuggestion[]
+  discussions     LibraryDiscussion[]
+  bookmarks       LibraryBookmark[]
+  linkedTestCases LibraryTestCaseLink[]
+  checklistItems  ReleaseChecklistItem[]   @relation("ChecklistLibraryTestCase")
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([collectionId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdById])
+}
+
+model LibraryTestCaseVersion {
+  id                String          @id @default(cuid())
+  libraryTestCaseId String
+  libraryTestCase   LibraryTestCase @relation(fields: [libraryTestCaseId], references: [id], onDelete: Cascade)
+  version           Int
+  title             String
+  description       String?
+  steps             String?
+  preconditions     String?
+  expectedOutcome   String?
+  changeNotes       String?
+  createdById       String
+  createdBy         User            @relation("LibraryVersionCreator", fields: [createdById], references: [id])
+  createdAt         DateTime        @default(now())
+
+  @@unique([libraryTestCaseId, version])
+  @@index([libraryTestCaseId])
+}
+
+model LibraryDependency {
+  id                String          @id @default(cuid())
+  libraryTestCaseId String
+  libraryTestCase   LibraryTestCase @relation("DependencySource", fields: [libraryTestCaseId], references: [id], onDelete: Cascade)
+  dependsOnId       String
+  dependsOn         LibraryTestCase @relation("DependencyTarget", fields: [dependsOnId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+
+  @@unique([libraryTestCaseId, dependsOnId])
+  @@index([libraryTestCaseId])
+  @@index([dependsOnId])
+}
+
+model LibrarySuggestion {
+  id                String           @id @default(cuid())
+  libraryTestCaseId String
+  libraryTestCase   LibraryTestCase  @relation(fields: [libraryTestCaseId], references: [id], onDelete: Cascade)
+  type              SuggestionType
+  content           String
+  status            SuggestionStatus @default(PENDING)
+  createdById       String
+  createdBy         User             @relation("SuggestionCreator", fields: [createdById], references: [id])
+  reviewedById      String?
+  reviewedBy        User?            @relation("SuggestionReviewer", fields: [reviewedById], references: [id])
+  reviewedAt        DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([libraryTestCaseId])
+  @@index([createdById])
+  @@index([status])
+}
+
+model LibraryDiscussion {
+  id                String          @id @default(cuid())
+  libraryTestCaseId String
+  libraryTestCase   LibraryTestCase @relation(fields: [libraryTestCaseId], references: [id], onDelete: Cascade)
+  content           String
+  createdById       String
+  createdBy         User            @relation("DiscussionCreator", fields: [createdById], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([libraryTestCaseId])
+  @@index([createdById])
+}
+
+model LibraryBookmark {
+  id                String          @id @default(cuid())
+  libraryTestCaseId String
+  libraryTestCase   LibraryTestCase @relation(fields: [libraryTestCaseId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+
+  @@unique([libraryTestCaseId, userId])
+  @@index([userId])
+  @@index([libraryTestCaseId])
+}
+
+model LibraryTestCaseLink {
+  id                String          @id @default(cuid())
+  libraryTestCaseId String
+  libraryTestCase   LibraryTestCase @relation(fields: [libraryTestCaseId], references: [id], onDelete: Cascade)
+  testCaseId        String
+  testCase          TestCase        @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  autoMatched       Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+
+  @@unique([libraryTestCaseId, testCaseId])
+  @@index([libraryTestCaseId])
+  @@index([testCaseId])
+}
+
+// ── Release models ────────────────────────────────────────────────────────────
+
+model Release {
+  id             String                 @id @default(cuid())
+  name           String
+  version        String
+  description    String?
+  status         ReleaseStatus          @default(DRAFT)
+  teamId         String?
+  team           Team?                  @relation(fields: [teamId], references: [id])
+  targetDate     DateTime?
+  releasedAt     DateTime?
+  createdById    String
+  createdBy      User                   @relation("ReleaseCreator", fields: [createdById], references: [id])
+  checklistItems ReleaseChecklistItem[]
+  testRuns       ReleaseTestRun[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([teamId])
+  @@index([status])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model ReleaseTestRun {
+  id        String   @id @default(cuid())
+  releaseId String
+  release   Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  testRunId String
+  testRun   TestRun  @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([releaseId, testRunId])
+  @@index([releaseId])
+  @@index([testRunId])
+}
+
+model ReleaseChecklistItem {
+  id                String              @id @default(cuid())
+  releaseId         String
+  release           Release             @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  type              ChecklistItemType
+  title             String
+  description       String?
+  status            ChecklistItemStatus @default(PENDING)
+  libraryTestCaseId String?
+  libraryTestCase   LibraryTestCase?    @relation("ChecklistLibraryTestCase", fields: [libraryTestCaseId], references: [id])
+  testCaseId        String?
+  testCase          TestCase?           @relation("ChecklistTestCase", fields: [testCaseId], references: [id])
+  order             Int                 @default(0)
+  assignedToId      String?
+  assignedTo        User?               @relation("ChecklistAssignee", fields: [assignedToId], references: [id])
+  completedAt       DateTime?
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([releaseId])
+  @@index([status])
+  @@index([libraryTestCaseId])
+  @@index([testCaseId])
 }

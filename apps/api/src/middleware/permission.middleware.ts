@@ -18,6 +18,8 @@ interface RolePermissions {
   canManageSystemSettings: boolean;
   canResetAnyPassword: boolean;
   canForceLogout: boolean;
+  canManageLibrary: boolean;
+  canManageReleases: boolean;
 }
 
 export type BooleanPermissionKey = {
@@ -38,6 +40,8 @@ export const PERMISSIONS: Record<UserRole, RolePermissions> = {
     canManageSystemSettings: true,
     canResetAnyPassword: true,
     canForceLogout: true,
+    canManageLibrary: true,
+    canManageReleases: true,
   },
   MANAGER: {
     dataScope: 'ALL_TEAMS',
@@ -52,6 +56,8 @@ export const PERMISSIONS: Record<UserRole, RolePermissions> = {
     canManageSystemSettings: false,
     canResetAnyPassword: false,
     canForceLogout: false,
+    canManageLibrary: true,
+    canManageReleases: true,
   },
   SUPERVISOR: {
     dataScope: 'ALL_TEAMS',
@@ -66,6 +72,8 @@ export const PERMISSIONS: Record<UserRole, RolePermissions> = {
     canManageSystemSettings: false,
     canResetAnyPassword: false,
     canForceLogout: false,
+    canManageLibrary: false,
+    canManageReleases: false,
   },
   TEAM_LEAD: {
     dataScope: 'OWN_TEAMS',
@@ -80,6 +88,8 @@ export const PERMISSIONS: Record<UserRole, RolePermissions> = {
     canManageSystemSettings: false,
     canResetAnyPassword: false,
     canForceLogout: false,
+    canManageLibrary: true,
+    canManageReleases: true,
   },
   MEMBER: {
     dataScope: 'OWN_TEAMS',
@@ -94,6 +104,8 @@ export const PERMISSIONS: Record<UserRole, RolePermissions> = {
     canManageSystemSettings: false,
     canResetAnyPassword: false,
     canForceLogout: false,
+    canManageLibrary: false,
+    canManageReleases: false,
   },
   MONITORING: {
     dataScope: 'ASSIGNED_TEAMS',
@@ -108,6 +120,8 @@ export const PERMISSIONS: Record<UserRole, RolePermissions> = {
     canManageSystemSettings: false,
     canResetAnyPassword: false,
     canForceLogout: false,
+    canManageLibrary: false,
+    canManageReleases: false,
   },
 };
 

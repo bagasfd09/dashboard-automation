@@ -8,6 +8,8 @@
     "seed": "tsx src/scripts/seed-admin.ts",
     "admin:seed": "tsx src/scripts/seed-admin.ts",
     "admin:reset-password": "tsx src/scripts/reset-admin-password.ts",
+    "seed:library": "tsx src/scripts/seed-library.ts",
+    "seed:library:force": "tsx src/scripts/seed-library.ts --force",
     "test": "vitest run"
   },
   "dependencies": {

@@ -18,6 +18,19 @@ import type {
   ActivityLogEntry,
   InviteRecord,
   UserRole,
+  LibraryCollection,
+  LibraryTestCase,
+  LibraryTestCaseDetail,
+  LibraryTestCaseVersion,
+  LibrarySuggestion,
+  LibraryDiscussion,
+  LibraryBookmark,
+  LibraryCoverageStats,
+  SuggestionType,
+  SuggestionStatus,
+  TestPriority,
+  TestDifficulty,
+  LibraryTestCaseStatus,
 } from './types';
 
 export type { PaginationMeta };
@@ -41,7 +54,8 @@ export function getAccessToken(): string | null {
 
 async function apiFetch<T>(path: string, init?: RequestInit & { _retry?: boolean }): Promise<T> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    // Only set JSON content-type when there is a body to avoid Fastify FST_ERR_CTP_EMPTY_JSON_BODY
+    ...(init?.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     ...(init?.headers as Record<string, string>),
   };
 
@@ -269,6 +283,178 @@ export const api = {
 
   // ── Artifacts (via Next.js proxy route — handles auth server-side) ────────
   artifactProxyUrl: (id: string) => `/api/artifact-proxy/${id}`,
+
+  // ── Library — Collections ─────────────────────────────────────────────────
+  getCollections: (teamId?: string) =>
+    apiFetch<LibraryCollection[]>(`/api/admin/library/collections${teamId ? `?teamId=${teamId}` : ''}`),
+
+  createCollection: (data: { name: string; description?: string; icon?: string; teamId?: string }) =>
+    apiFetch<LibraryCollection>('/api/admin/library/collections', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateCollection: (id: string, data: { name?: string; description?: string; icon?: string }) =>
+    apiFetch<LibraryCollection>(`/api/admin/library/collections/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteCollection: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/library/collections/${id}`, { method: 'DELETE' }),
+
+  // ── Library — Test Cases ──────────────────────────────────────────────────
+  getLibraryTestCases: (params: {
+    collectionId?: string;
+    status?: LibraryTestCaseStatus;
+    priority?: TestPriority;
+    search?: string;
+    tags?: string;
+    page?: number;
+    pageSize?: number;
+  }) => apiFetch<Paginated<LibraryTestCase>>(`/api/admin/library/test-cases?${qs(params)}`),
+
+  getLibraryTestCase: (id: string) =>
+    apiFetch<LibraryTestCaseDetail>(`/api/admin/library/test-cases/${id}`),
+
+  createLibraryTestCase: (data: {
+    title: string;
+    description?: string;
+    priority?: TestPriority;
+    difficulty?: TestDifficulty;
+    collectionId?: string;
+    tags?: string[];
+    steps?: string;
+    preconditions?: string;
+    expectedOutcome?: string;
+  }) =>
+    apiFetch<LibraryTestCase>('/api/admin/library/test-cases', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateLibraryTestCase: (
+    id: string,
+    data: {
+      title?: string;
+      description?: string;
+      priority?: TestPriority;
+      difficulty?: TestDifficulty;
+      status?: LibraryTestCaseStatus;
+      collectionId?: string;
+      tags?: string[];
+      steps?: string;
+      preconditions?: string;
+      expectedOutcome?: string;
+      changeNotes?: string;
+    },
+  ) =>
+    apiFetch<LibraryTestCase>(`/api/admin/library/test-cases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteLibraryTestCase: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/library/test-cases/${id}`, { method: 'DELETE' }),
+
+  // ── Library — Links ───────────────────────────────────────────────────────
+  linkTestCase: (libraryTestCaseId: string, testCaseId: string) =>
+    apiFetch<{ id: string }>(`/api/admin/library/test-cases/${libraryTestCaseId}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ testCaseId }),
+    }),
+
+  unlinkTestCase: (libraryTestCaseId: string, testCaseId: string) =>
+    apiFetch<{ message: string }>(
+      `/api/admin/library/test-cases/${libraryTestCaseId}/link/${testCaseId}`,
+      { method: 'DELETE' },
+    ),
+
+  // ── Library — Coverage ────────────────────────────────────────────────────
+  getCoverageStats: (collectionId?: string) =>
+    apiFetch<LibraryCoverageStats>(
+      `/api/admin/library/coverage${collectionId ? `?collectionId=${collectionId}` : ''}`,
+    ),
+
+  getCoverageGaps: (olderThanDays?: number) =>
+    apiFetch<LibraryTestCase[]>(
+      `/api/admin/library/gaps${olderThanDays !== undefined ? `?olderThanDays=${olderThanDays}` : ''}`,
+    ),
+
+  runAutoMatch: () =>
+    apiFetch<{ matched: number; gaps: number }>('/api/admin/library/auto-match', { method: 'POST' }),
+
+  // ── Library — Versions ────────────────────────────────────────────────────
+  getVersions: (testCaseId: string, page = 1, pageSize = 10) =>
+    apiFetch<Paginated<LibraryTestCaseVersion>>(
+      `/api/admin/library/test-cases/${testCaseId}/versions?page=${page}&pageSize=${pageSize}`,
+    ),
+
+  rollbackVersion: (testCaseId: string, version: number) =>
+    apiFetch<LibraryTestCase>(`/api/admin/library/test-cases/${testCaseId}/rollback`, {
+      method: 'POST',
+      body: JSON.stringify({ version }),
+    }),
+
+  // ── Library — Suggestions ─────────────────────────────────────────────────
+  getAllSuggestions: (params: { status?: SuggestionStatus; page?: number; pageSize?: number }) =>
+    apiFetch<Paginated<LibrarySuggestion>>(`/api/admin/library/suggestions?${qs(params)}`),
+
+  getSuggestions: (testCaseId: string, params: { status?: SuggestionStatus; page?: number; pageSize?: number }) =>
+    apiFetch<Paginated<LibrarySuggestion>>(
+      `/api/admin/library/test-cases/${testCaseId}/suggestions?${qs(params)}`,
+    ),
+
+  createSuggestion: (testCaseId: string, data: { type: SuggestionType; content: string }) =>
+    apiFetch<LibrarySuggestion>(`/api/admin/library/test-cases/${testCaseId}/suggestions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  reviewSuggestion: (id: string, status: SuggestionStatus) =>
+    apiFetch<LibrarySuggestion>(`/api/admin/library/suggestions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  // ── Library — Discussions ─────────────────────────────────────────────────
+  getDiscussions: (testCaseId: string, page = 1, pageSize = 20) =>
+    apiFetch<Paginated<LibraryDiscussion>>(
+      `/api/admin/library/test-cases/${testCaseId}/discussions?page=${page}&pageSize=${pageSize}`,
+    ),
+
+  postDiscussion: (testCaseId: string, content: string) =>
+    apiFetch<LibraryDiscussion>(`/api/admin/library/test-cases/${testCaseId}/discussions`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  deleteDiscussion: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/library/discussions/${id}`, { method: 'DELETE' }),
+
+  // ── Library — Bookmarks ───────────────────────────────────────────────────
+  toggleBookmark: (testCaseId: string) =>
+    apiFetch<{ bookmarked: boolean }>(`/api/admin/library/test-cases/${testCaseId}/bookmark`, {
+      method: 'POST',
+    }),
+
+  getBookmarks: (page = 1, pageSize = 20) =>
+    apiFetch<Paginated<LibraryBookmark>>(
+      `/api/admin/library/bookmarks?page=${page}&pageSize=${pageSize}`,
+    ),
+
+  // ── Library — Dependencies ────────────────────────────────────────────────
+  addDependency: (libraryTestCaseId: string, dependsOnId: string) =>
+    apiFetch<{ id: string }>(`/api/admin/library/test-cases/${libraryTestCaseId}/dependencies`, {
+      method: 'POST',
+      body: JSON.stringify({ dependsOnId }),
+    }),
+
+  removeDependency: (libraryTestCaseId: string, dependsOnId: string) =>
+    apiFetch<{ message: string }>(
+      `/api/admin/library/test-cases/${libraryTestCaseId}/dependencies/${dependsOnId}`,
+      { method: 'DELETE' },
+    ),
 };
 
 export { BASE, ADMIN_KEY };

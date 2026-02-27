@@ -249,6 +249,132 @@ export interface TopFailingTest {
   failureCount: number;
 }
 
+// ── Library types ─────────────────────────────────────────────────────────────
+
+export type TestPriority = 'P0' | 'P1' | 'P2' | 'P3';
+export type TestDifficulty = 'EASY' | 'MEDIUM' | 'HARD' | 'COMPLEX';
+export type LibraryTestCaseStatus = 'DRAFT' | 'ACTIVE' | 'DEPRECATED' | 'ARCHIVED';
+export type SuggestionType = 'IMPROVEMENT' | 'BUG_REPORT' | 'UPDATE' | 'OBSOLETE';
+export type SuggestionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+export interface LibraryCollection {
+  id: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  teamId: string | null;
+  team?: { id: string; name: string } | null;
+  createdById: string;
+  createdBy?: { id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+  _count?: { testCases: number };
+}
+
+export interface LibraryTestCase {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: TestPriority;
+  difficulty: TestDifficulty;
+  status: LibraryTestCaseStatus;
+  collectionId: string | null;
+  collection?: { id: string; name: string } | null;
+  tags: string[];
+  steps: string | null;
+  preconditions: string | null;
+  expectedOutcome: string | null;
+  createdById: string;
+  createdBy?: { id: string; name: string };
+  updatedById: string | null;
+  updatedBy?: { id: string; name: string } | null;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { linkedTestCases: number; bookmarks: number; discussions: number };
+}
+
+export interface LibraryTestCaseDetail extends LibraryTestCase {
+  versions?: LibraryTestCaseVersion[];
+  dependencies?: { dependsOn: { id: string; title: string; status: LibraryTestCaseStatus } }[];
+  dependents?: { libraryTestCase: { id: string; title: string; status: LibraryTestCaseStatus } }[];
+  linkedTestCases?: {
+    id: string;
+    testCaseId: string;
+    autoMatched: boolean;
+    createdAt: string;
+    testCase: { id: string; title: string; filePath: string; team?: { id: string; name: string } };
+  }[];
+  _count?: { linkedTestCases: number; bookmarks: number; discussions: number; suggestions: number };
+}
+
+export interface LibraryTestCaseVersion {
+  id: string;
+  libraryTestCaseId: string;
+  version: number;
+  title: string;
+  description: string | null;
+  steps: string | null;
+  preconditions: string | null;
+  expectedOutcome: string | null;
+  changeNotes: string | null;
+  createdById: string;
+  createdBy?: { id: string; name: string };
+  createdAt: string;
+}
+
+export interface LibrarySuggestion {
+  id: string;
+  libraryTestCaseId: string;
+  libraryTestCase?: {
+    id: string;
+    title: string;
+    collection?: { id: string; name: string } | null;
+  };
+  type: SuggestionType;
+  content: string;
+  status: SuggestionStatus;
+  createdById: string;
+  createdBy?: { id: string; name: string };
+  reviewedById: string | null;
+  reviewedBy?: { id: string; name: string } | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LibraryDiscussion {
+  id: string;
+  libraryTestCaseId: string;
+  content: string;
+  createdById: string;
+  createdBy?: { id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LibraryBookmark {
+  id: string;
+  libraryTestCaseId: string;
+  userId: string;
+  createdAt: string;
+  libraryTestCase?: {
+    id: string;
+    title: string;
+    priority: TestPriority;
+    status: LibraryTestCaseStatus;
+    collection?: { id: string; name: string } | null;
+  };
+}
+
+export interface LibraryCoverageStats {
+  total: number;
+  linked: number;
+  unlinked: number;
+  coverage: number;
+  byStatus: { status: LibraryTestCaseStatus; count: number }[];
+  byPriority: { priority: TestPriority; count: number }[];
+}
+
 export interface TeamDetailStats {
   team: { id: string; name: string; createdAt: string };
   testCases: { total: number; withFailures: number; withoutRuns: number };

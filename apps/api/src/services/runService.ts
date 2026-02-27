@@ -1,6 +1,7 @@
 import { prisma } from '@qc-monitor/db';
 import type { TestRun, RunStatus } from '@qc-monitor/db';
 import { eventService } from './eventService.js';
+import { onRunFinished } from './release.service.js';
 
 interface PaginationMeta {
   page: number;
@@ -114,6 +115,12 @@ export async function updateRun(
     },
   });
   eventService.broadcast(teamId, 'run:finished', updated);
+
+  // Auto-update release checklist items when run finishes
+  if (body.status && body.status !== 'RUNNING') {
+    onRunFinished(id).catch(() => {/* non-blocking */});
+  }
+
   return updated;
 }
 

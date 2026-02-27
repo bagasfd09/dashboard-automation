@@ -16,6 +16,7 @@ import {
   LogOut,
   ChevronDown,
   UserCog,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -37,6 +38,7 @@ const links: NavLink[] = [
   { href: '/teams', label: 'Teams', icon: Users },
   { href: '/test-cases', label: 'Test Cases', icon: TestTube },
   { href: '/runs', label: 'Test Runs', icon: Play },
+  { href: '/library', label: 'Library', icon: BookOpen },
   { href: '/retries', label: 'Retries', icon: RotateCcw, roles: ['ADMIN', 'MANAGER', 'SUPERVISOR', 'TEAM_LEAD', 'MEMBER'] },
   { href: '/users', label: 'Users', icon: UserCog, roles: ['ADMIN', 'MANAGER', 'TEAM_LEAD'] },
   { href: '/api-keys', label: 'API Keys', icon: Key, roles: ['ADMIN', 'TEAM_LEAD'] },
@@ -87,6 +89,9 @@ export function Sidebar() {
           break;
         case '/test-cases':
           queryClient.prefetchQuery({ queryKey: ['test-cases-grouped', { groupBy: 'suite', page: 1 }], queryFn: () => api.getTestCasesGrouped({ groupBy: 'suite', page: 1, pageSize: 10 }), staleTime: PREFETCH_STALE });
+          break;
+        case '/library':
+          queryClient.prefetchQuery({ queryKey: ['library-collections', undefined], queryFn: () => api.getCollections(), staleTime: PREFETCH_STALE });
           break;
         case '/retries':
           queryClient.prefetchQuery({ queryKey: ['retries', 1, 20], queryFn: () => api.getRetries({ page: 1, pageSize: 20 }), staleTime: PREFETCH_STALE });

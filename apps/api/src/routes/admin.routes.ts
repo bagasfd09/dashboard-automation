@@ -15,13 +15,17 @@ import * as teamService from '../services/teamService.js';
 import { logActivity } from '../services/auth.service.js';
 import { eventService } from '../services/eventService.js';
 import { usersRoutes } from './users.routes.js';
+import { libraryRoutes } from './library.routes.js';
+import { releaseRoutes } from './release.routes.js';
 import type { TestStatus } from '@qc-monitor/db';
 
 export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   const auth = requireAuth();
 
-  // Register user management sub-routes at /api/admin/users
+  // Register sub-routes
   await fastify.register(usersRoutes, { prefix: '/users' });
+  await fastify.register(libraryRoutes, { prefix: '/library' });
+  await fastify.register(releaseRoutes, { prefix: '/releases' });
 
   // ── Teams ─────────────────────────────────────────────────────────────────
 

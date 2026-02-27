@@ -71,6 +71,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         role: user.role,
         mustChangePass: user.mustChangePass,
         teams,
+        permissions: PERMISSIONS[user.role],
       },
     });
   });
@@ -141,6 +142,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
           role: stored.user.role,
           mustChangePass: stored.user.mustChangePass,
           teams,
+          permissions: PERMISSIONS[stored.user.role],
         },
       });
     } catch {
@@ -221,6 +223,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
           role: user.role,
           mustChangePass: user.mustChangePass,
           teams,
+          permissions: PERMISSIONS[user.role],
         },
       });
     } catch (err) {
