@@ -17,6 +17,8 @@ import { eventService } from '../services/eventService.js';
 import { usersRoutes } from './users.routes.js';
 import { libraryRoutes } from './library.routes.js';
 import { releaseRoutes } from './release.routes.js';
+import { applicationRoutes } from './application.routes.js';
+import { taskGroupRoutes } from './task-group.routes.js';
 import type { TestStatus } from '@qc-monitor/db';
 
 export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
@@ -26,6 +28,8 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(usersRoutes, { prefix: '/users' });
   await fastify.register(libraryRoutes, { prefix: '/library' });
   await fastify.register(releaseRoutes, { prefix: '/releases' });
+  await fastify.register(applicationRoutes, { prefix: '/applications' });
+  await fastify.register(taskGroupRoutes, { prefix: '/task-groups' });
 
   // ── Teams ─────────────────────────────────────────────────────────────────
 
@@ -284,9 +288,10 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   /** GET /api/admin/overview */
   fastify.get('/overview', { preHandler: auth }, async (request, reply) => {
     const user = request.user!;
+    const { applicationId } = request.query as { applicationId?: string };
     const scope = await resolveTeamScope(user);
     try {
-      const overview = await adminService.getOverview(scope?.scopeTeamIds);
+      const overview = await adminService.getOverview(scope?.scopeTeamIds, applicationId);
       return reply.send(overview);
     } catch (err) {
       fastify.log.error(err);
@@ -441,16 +446,24 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
             teamId: { type: 'string' },
             page: { type: 'integer', minimum: 1, default: 1 },
             pageSize: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+            source: { type: 'string', enum: ['LOCAL', 'CI', 'MANUAL'] },
+            branch: { type: 'string' },
+            environment: { type: 'string' },
+            applicationId: { type: 'string' },
           },
         },
       },
     },
     async (request, reply) => {
       const user = request.user!;
-      const { teamId, page, pageSize } = request.query as {
+      const { teamId, page, pageSize, source, branch, environment, applicationId } = request.query as {
         teamId?: string;
         page?: number;
         pageSize?: number;
+        source?: 'LOCAL' | 'CI' | 'MANUAL';
+        branch?: string;
+        environment?: string;
+        applicationId?: string;
       };
 
       const scope = await resolveTeamScope(user, teamId);
@@ -459,7 +472,12 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       try {
-        const result = await runService.listRuns(scope.teamId, page, pageSize, scope.scopeTeamIds);
+        const result = await runService.listRuns(scope.teamId, page, pageSize, scope.scopeTeamIds, {
+          source: source as import('@qc-monitor/db').RunSource | undefined,
+          branch,
+          environment,
+          applicationId,
+        });
         return reply.send(result);
       } catch (err) {
         fastify.log.error(err);
@@ -491,17 +509,19 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       const q = request.query as { page?: number; pageSize?: number; status?: string; search?: string };
 
       try {
-        const runMeta = await prisma.testRun.findUnique({ where: { id }, select: { teamId: true } });
+        const [runMeta, run] = await Promise.all([
+          prisma.testRun.findUnique({ where: { id }, select: { teamId: true } }),
+          runService.getPaginatedRun(id, undefined, {
+            page: q.page,
+            pageSize: q.pageSize,
+            status: q.status,
+            search: q.search,
+          }),
+        ]);
         if (!runMeta) return reply.code(404).send({ error: 'Run not found', statusCode: 404 });
         if (!(await canUserAccessTeam(user, runMeta.teamId))) {
           return reply.code(403).send({ error: 'Access denied', statusCode: 403 });
         }
-        const run = await runService.getPaginatedRun(id, undefined, {
-          page: q.page,
-          pageSize: q.pageSize,
-          status: q.status,
-          search: q.search,
-        });
         return reply.send(run);
       } catch (err) {
         fastify.log.error(err);
@@ -533,17 +553,19 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       const q = request.query as { page?: number; pageSize?: number; innerPageSize?: number; status?: string };
 
       try {
-        const runMeta = await prisma.testRun.findUnique({ where: { id }, select: { teamId: true } });
+        const [runMeta, result] = await Promise.all([
+          prisma.testRun.findUnique({ where: { id }, select: { teamId: true } }),
+          runService.getRunResultsGrouped(id, undefined, {
+            page: q.page,
+            pageSize: q.pageSize,
+            innerPageSize: q.innerPageSize,
+            status: q.status,
+          }),
+        ]);
         if (!runMeta) return reply.code(404).send({ error: 'Run not found', statusCode: 404 });
         if (!(await canUserAccessTeam(user, runMeta.teamId))) {
           return reply.code(403).send({ error: 'Access denied', statusCode: 403 });
         }
-        const result = await runService.getRunResultsGrouped(id, undefined, {
-          page: q.page,
-          pageSize: q.pageSize,
-          innerPageSize: q.innerPageSize,
-          status: q.status,
-        });
         return reply.send(result);
       } catch (err) {
         fastify.log.error(err);

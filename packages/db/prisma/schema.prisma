@@ -17,6 +17,8 @@ model Team {
   teamMembers   TeamMember[]
   collections   LibraryCollection[]
   releases      Release[]
+  applications  Application[]
+  taskGroups    TaskGroup[]
   createdAt     DateTime            @default(now())
 }
 
@@ -47,6 +49,9 @@ model User {
   bookmarks                LibraryBookmark[]
   releasesCreated          Release[]                @relation("ReleaseCreator")
   checklistAssignments     ReleaseChecklistItem[]   @relation("ChecklistAssignee")
+  applicationsCreated      Application[]            @relation("ApplicationCreator")
+  ownedTaskGroups          TaskGroup[]              @relation("TaskGroupOwner")
+  createdTaskGroups        TaskGroup[]              @relation("TaskGroupCreator")
 }
 
 model TeamMember {
@@ -135,46 +140,61 @@ enum InviteStatus {
 }
 
 model TestCase {
-  id            String                 @id @default(cuid())
-  title         String
-  filePath      String
-  suiteName     String?
-  tags          String[]
-  teamId        String
-  team          Team                   @relation(fields: [teamId], references: [id])
-  results       TestResult[]
-  retryRequests RetryRequest[]
-  libraryLinks  LibraryTestCaseLink[]
+  id             String                 @id @default(cuid())
+  title          String
+  filePath       String
+  suiteName      String?
+  tags           String[]
+  teamId         String
+  team           Team                   @relation(fields: [teamId], references: [id])
+  applicationId  String?
+  application    Application?           @relation(fields: [applicationId], references: [id])
+  results        TestResult[]
+  retryRequests  RetryRequest[]
+  libraryLinks   LibraryTestCaseLink[]
   checklistItems ReleaseChecklistItem[] @relation("ChecklistTestCase")
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   @@unique([teamId, filePath, title])
   @@index([teamId])
   @@index([teamId, suiteName])
   @@index([suiteName])
+  @@index([applicationId])
   @@index([createdAt])
 }
 
 model TestRun {
-  id          String           @id @default(cuid())
-  teamId      String
-  team        Team             @relation(fields: [teamId], references: [id])
-  status      RunStatus        @default(RUNNING)
-  results     TestResult[]
-  totalTests  Int              @default(0)
-  passed      Int              @default(0)
-  failed      Int              @default(0)
-  skipped     Int              @default(0)
-  duration    Int?
-  startedAt   DateTime         @default(now())
-  finishedAt  DateTime?
-  releases    ReleaseTestRun[]
+  id            String           @id @default(cuid())
+  teamId        String
+  team          Team             @relation(fields: [teamId], references: [id])
+  applicationId String?
+  application   Application?     @relation(fields: [applicationId], references: [id])
+  status        RunStatus        @default(RUNNING)
+  source        RunSource        @default(LOCAL)
+  branch        String?          @db.VarChar(255)
+  environment   String?          @db.VarChar(100)
+  results       TestResult[]
+  totalTests    Int              @default(0)
+  passed        Int              @default(0)
+  failed        Int              @default(0)
+  skipped       Int              @default(0)
+  duration      Int?
+  startedAt     DateTime         @default(now())
+  finishedAt    DateTime?
+  releases          ReleaseTestRun[]
+  taskItemsAsLocal  TaskGroupItem[]  @relation("TaskItemLocalRun")
+  taskItemsAsEnv    TaskGroupItem[]  @relation("TaskItemEnvRun")
 
   @@index([teamId])
   @@index([teamId, status])
   @@index([status])
   @@index([startedAt])
+  @@index([branch])
+  @@index([source])
+  @@index([environment])
+  @@index([applicationId])
+  @@index([teamId, source, branch])
 }
 
 model TestResult {
@@ -216,6 +236,12 @@ enum RunStatus {
   PASSED
   FAILED
   CANCELLED
+}
+
+enum RunSource {
+  LOCAL
+  CI
+  MANUAL
 }
 
 enum TestStatus {
@@ -323,19 +349,22 @@ enum ChecklistItemStatus {
 // ── Library models ─────────────────────────────────────────────────────────────
 
 model LibraryCollection {
-  id          String            @id @default(cuid())
-  name        String
-  description String?
-  icon        String?
-  teamId      String?
-  team        Team?             @relation(fields: [teamId], references: [id])
-  createdById String
-  createdBy   User              @relation("CollectionCreator", fields: [createdById], references: [id])
-  testCases   LibraryTestCase[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id            String            @id @default(cuid())
+  name          String
+  description   String?
+  icon          String?
+  teamId        String?
+  team          Team?             @relation(fields: [teamId], references: [id])
+  applicationId String?
+  application   Application?      @relation(fields: [applicationId], references: [id])
+  createdById   String
+  createdBy     User              @relation("CollectionCreator", fields: [createdById], references: [id])
+  testCases     LibraryTestCase[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   @@index([teamId])
+  @@index([applicationId])
   @@index([createdById])
 }
 
@@ -364,6 +393,7 @@ model LibraryTestCase {
   bookmarks       LibraryBookmark[]
   linkedTestCases LibraryTestCaseLink[]
   checklistItems  ReleaseChecklistItem[]   @relation("ChecklistLibraryTestCase")
+  taskGroupItems  TaskGroupItem[]
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
 
@@ -476,6 +506,8 @@ model Release {
   status         ReleaseStatus          @default(DRAFT)
   teamId         String?
   team           Team?                  @relation(fields: [teamId], references: [id])
+  applicationId  String?
+  application    Application?           @relation(fields: [applicationId], references: [id])
   targetDate     DateTime?
   releasedAt     DateTime?
   createdById    String
@@ -486,6 +518,7 @@ model Release {
   updatedAt      DateTime               @updatedAt
 
   @@index([teamId])
+  @@index([applicationId])
   @@index([status])
   @@index([createdById])
   @@index([createdAt])
@@ -528,4 +561,117 @@ model ReleaseChecklistItem {
   @@index([status])
   @@index([libraryTestCaseId])
   @@index([testCaseId])
+}
+
+// ── Task Group enums ──────────────────────────────────────────────────────────
+
+enum TaskGroupStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskItemPersonalStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SKIPPED
+}
+
+// ── Task Group models ─────────────────────────────────────────────────────────
+
+model TaskGroup {
+  id            String          @id @default(cuid())
+  name          String          @db.VarChar(200)
+
+  userId        String
+  user          User            @relation("TaskGroupOwner", fields: [userId], references: [id])
+
+  createdById   String
+  createdBy     User            @relation("TaskGroupCreator", fields: [createdById], references: [id])
+
+  teamId        String
+  team          Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  applicationId String?
+  application   Application?    @relation(fields: [applicationId], references: [id])
+
+  branch        String?         @db.VarChar(255)
+  dueDate       DateTime?
+  status        TaskGroupStatus @default(ACTIVE)
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  items         TaskGroupItem[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([teamId])
+  @@index([teamId, status])
+  @@index([branch])
+  @@index([applicationId])
+}
+
+model TaskGroupItem {
+  id              String                 @id @default(cuid())
+
+  taskGroupId     String
+  taskGroup       TaskGroup              @relation(fields: [taskGroupId], references: [id], onDelete: Cascade)
+
+  libraryTestCaseId String
+  libraryTestCase   LibraryTestCase      @relation(fields: [libraryTestCaseId], references: [id])
+
+  personalStatus  TaskItemPersonalStatus @default(NOT_STARTED)
+  skippedReason   String?                @db.Text
+
+  localResultStatus String?              @db.VarChar(20)
+  localTestRunId    String?
+  localTestRun      TestRun?             @relation("TaskItemLocalRun", fields: [localTestRunId], references: [id])
+  localMatchedAt    DateTime?
+
+  envResultStatus   String?              @db.VarChar(20)
+  envTestRunId      String?
+  envTestRun        TestRun?             @relation("TaskItemEnvRun", fields: [envTestRunId], references: [id])
+  envMatchedAt      DateTime?
+
+  note            String?                @db.Text
+  order           Int                    @default(0)
+
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@unique([taskGroupId, libraryTestCaseId])
+  @@index([taskGroupId])
+  @@index([libraryTestCaseId])
+  @@index([localTestRunId])
+  @@index([envTestRunId])
+}
+
+// ── Application model ─────────────────────────────────────────────────────────
+
+model Application {
+  id           String              @id @default(cuid())
+  name         String
+  slug         String
+  description  String?
+  icon         String?
+  color        String?
+  environments String[]
+  isActive     Boolean             @default(true)
+  teamId       String
+  team         Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdById  String
+  createdBy    User                @relation("ApplicationCreator", fields: [createdById], references: [id])
+  testRuns     TestRun[]
+  testCases    TestCase[]
+  collections  LibraryCollection[]
+  releases     Release[]
+  taskGroups   TaskGroup[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([teamId, slug])
+  @@index([teamId])
+  @@index([slug])
+  @@index([isActive])
 }

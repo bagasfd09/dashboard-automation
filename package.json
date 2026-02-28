@@ -12,6 +12,7 @@
     "test:integration:menus": "tsx tests/integration/run.ts --project=menus",
     "test:integration:smoke": "tsx tests/integration/run.ts --project=smoke",
     "db:seed": "pnpm --filter @qc-monitor/api seed",
+    "db:seed:demo": "pnpm --filter @qc-monitor/db seed:demo",
     "publish:reporter": "pnpm --filter @bagasfd09/qc-monitor-reporter publish"
   },
   "devDependencies": {

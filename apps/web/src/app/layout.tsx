@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider } from '@/providers/AuthProvider';
+import { AppContextProvider } from '@/providers/AppContextProvider';
 import { ClientLayout } from '@/components/ClientLayout';
 
 export const metadata: Metadata = {
@@ -19,7 +20,9 @@ export default function RootLayout({
       <body className="bg-background text-foreground flex h-screen overflow-hidden">
         <ThemeProvider>
           <AuthProvider>
-            <ClientLayout>{children}</ClientLayout>
+            <AppContextProvider>
+              <ClientLayout>{children}</ClientLayout>
+            </AppContextProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

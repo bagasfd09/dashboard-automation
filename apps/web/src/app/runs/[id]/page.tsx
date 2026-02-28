@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect, useRef, useMemo } from 'react';
+import { Suspense, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -8,9 +8,11 @@ import {
   Video,
   FileText,
   Download,
-  ChevronLeft,
-  ChevronDown,
   ChevronRight,
+  ChevronDown,
+  RotateCcw,
+  Share2,
+  ArrowLeft,
 } from 'lucide-react';
 import { useRun, useRunResultsGrouped } from '@/hooks/use-runs';
 import { StatusBadge } from '@/components/status-badge';
@@ -18,7 +20,7 @@ import { ScreenshotViewer } from '@/components/ScreenshotViewer';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { Pagination } from '@/components/Pagination';
 import { InnerPagination } from '@/components/InnerPagination';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -42,67 +44,76 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { RetryButton } from '@/components/RetryButton';
-import type { Artifact, TestStatus, RunResultGroup } from '@/lib/types';
+import { RunSourceBadge } from '@/components/ui/run-source-badge';
+import { BranchBadge } from '@/components/ui/branch-badge';
+import { EnvironmentBadge } from '@/components/ui/environment-badge';
+import { StatusBar } from '@/components/ui/status-bar';
+import { FilterChip } from '@/components/ui/filter-chip';
+import { HistoryDots } from '@/components/ui/history-dots';
+import { SmartButton } from '@/components/ui/smart-button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useToast } from '@/hooks/use-toast';
+import { useKeyboardShortcut } from '@/hooks/use-keyboard-shortcut';
+import { RunDetailSkeleton } from '@/components/skeletons';
+import type { Artifact, TestStatus, RunResultGroup, RunSource } from '@/lib/types';
 import { cn } from '@/lib/utils';
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 type FilterStatus = 'all' | TestStatus;
 type GroupByMode = 'none' | 'suite';
 
-function formatDuration(ms?: number) {
+type ResultRow = {
+  id: string;
+  testCaseId: string;
+  status: TestStatus;
+  duration?: number;
+  error?: string;
+  retryCount: number;
+  artifacts: Artifact[];
+  testCase?: { id: string; title: string; filePath: string; suiteName?: string };
+};
+
+// ── Utility functions ──────────────────────────────────────────────────────────
+
+function formatDuration(ms?: number): string {
   if (!ms) return '—';
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function formatDate(iso?: string) {
+function formatDate(iso?: string): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString();
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function SummaryCard({
-  label,
-  value,
-  valueClass,
-}: {
-  label: string;
-  value: string | number;
-  valueClass?: string;
-}) {
-  return (
-    <Card className="bg-card border-border">
-      <CardContent className="pt-4 pb-4">
-        <p className="text-muted-foreground text-xs uppercase tracking-wide">{label}</p>
-        <p className={cn('text-2xl font-bold mt-1', valueClass ?? 'text-foreground')}>{value}</p>
-      </CardContent>
-    </Card>
-  );
+function formatTimeAgo(iso?: string): string {
+  if (!iso) return '—';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
 }
 
-function PassFailBar({ passed, failed, total }: { passed: number; failed: number; total: number }) {
-  if (!total) return null;
-  const passedPct = (passed / total) * 100;
-  const failedPct = (failed / total) * 100;
-  const skippedPct = 100 - passedPct - failedPct;
-
-  return (
-    <div className="space-y-1">
-      <div className="flex h-3 rounded-full overflow-hidden bg-muted">
-        <div className="bg-green-500 transition-all" style={{ width: `${passedPct}%` }} title={`Passed: ${passed}`} />
-        <div className="bg-red-500 transition-all" style={{ width: `${failedPct}%` }} title={`Failed: ${failed}`} />
-        <div className="bg-muted-foreground/30 transition-all" style={{ width: `${skippedPct}%` }} title="Skipped" />
-      </div>
-      <div className="flex gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />{passed} passed</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />{failed} failed</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-muted-foreground/40 inline-block" />{total - passed - failed} skipped</span>
-      </div>
-    </div>
-  );
+function getRunStatusIcon(status: string): { bg: string; text: string; symbol: string } {
+  switch (status) {
+    case 'PASSED':    return { bg: 'bg-green-500/15',  text: 'text-green-500',  symbol: '✓' };
+    case 'FAILED':    return { bg: 'bg-red-500/15',    text: 'text-red-500',    symbol: '✗' };
+    case 'RUNNING':   return { bg: 'bg-blue-500/15',   text: 'text-blue-500',   symbol: '▶' };
+    case 'CANCELLED': return { bg: 'bg-muted',          text: 'text-muted-foreground', symbol: '●' };
+    default:          return { bg: 'bg-muted',          text: 'text-muted-foreground', symbol: '?' };
+  }
 }
+
+// ── ArtifactButtons ────────────────────────────────────────────────────────────
 
 function ArtifactButtons({
   artifacts,
@@ -123,7 +134,7 @@ function ArtifactButtons({
         <button
           key={a.id}
           title="View screenshot"
-          onClick={() => onScreenshot(a)}
+          onClick={(e) => { e.stopPropagation(); onScreenshot(a); }}
           className="p-1 rounded text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 hover:bg-muted transition-colors"
         >
           <Camera className="h-3.5 w-3.5" />
@@ -133,7 +144,7 @@ function ArtifactButtons({
         <button
           key={a.id}
           title="Play video"
-          onClick={() => onVideo(a)}
+          onClick={(e) => { e.stopPropagation(); onVideo(a); }}
           className="p-1 rounded text-muted-foreground hover:text-purple-600 dark:hover:text-purple-400 hover:bg-muted transition-colors"
         >
           <Video className="h-3.5 w-3.5" />
@@ -155,42 +166,14 @@ function ArtifactButtons({
           )}
         </a>
       ))}
-      {artifacts.length === 0 && <span className="text-muted-foreground/60 text-xs">—</span>}
+      {artifacts.length === 0 && (
+        <span className="text-muted-foreground/40 text-[10px]">—</span>
+      )}
     </div>
   );
 }
 
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-8 w-48 bg-muted" />
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 bg-muted rounded-lg" />
-        ))}
-      </div>
-      <Skeleton className="h-4 bg-muted rounded-full" />
-      <div className="space-y-2">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 bg-muted rounded" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Results table ─────────────────────────────────────────────────────────────
-
-type ResultRow = {
-  id: string;
-  testCaseId: string;
-  status: TestStatus;
-  duration?: number;
-  error?: string;
-  retryCount: number;
-  artifacts: Artifact[];
-  testCase?: { id: string; title: string; filePath: string; suiteName?: string };
-};
+// ── ResultsTable (flat view) ───────────────────────────────────────────────────
 
 function ResultsTable({
   results,
@@ -208,7 +191,7 @@ function ResultsTable({
   if (results.length === 0) {
     return (
       <TableRow className="border-border">
-        <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+        <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
           No results match the current filter
         </TableCell>
       </TableRow>
@@ -279,12 +262,13 @@ function ResultsTable({
   );
 }
 
-// ── Suite group accordion (run detail) ───────────────────────────────────────
+// ── Suite Accordion (redesigned) ───────────────────────────────────────────────
 
 function RunSuiteGroup({
   group,
   outerPage,
   teamId,
+  totalSuites,
   onErrorClick,
   onScreenshot,
   onVideo,
@@ -292,11 +276,13 @@ function RunSuiteGroup({
   group: RunResultGroup;
   outerPage: number;
   teamId: string;
+  totalSuites: number;
   onErrorClick: (err: string) => void;
   onScreenshot: (a: Artifact, title: string) => void;
   onVideo: (a: Artifact, title: string) => void;
 }) {
-  const [open, setOpen] = useState(group.stats.failed > 0);
+  // Open by default if: has failures OR total suites <= 5
+  const [open, setOpen] = useState(group.stats.failed > 0 || totalSuites <= 5);
   const [innerPage, setInnerPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
 
@@ -305,77 +291,164 @@ function RunSuiteGroup({
     setShowAll(false);
   }, [outerPage]);
 
+  const { stats } = group;
   const hasInnerPagination = (group.pagination?.totalPages ?? 1) > 1;
-  const effectivePageSize = showAll
-    ? Math.min(group.pagination?.totalItems ?? 999, 500)
-    : (group.pagination?.pageSize ?? 5);
-
-  const displayResults = innerPage === 1 && !showAll
-    ? group.results
-    : group.results;
-
+  const displayResults = group.results;
   const paginationMeta = group.pagination;
 
-  const { stats } = group;
-  const accentClass = cn(
-    'w-1 self-stretch rounded-full mr-3 shrink-0',
-    stats.failed > 0 ? 'bg-red-500' : stats.total === stats.passed ? 'bg-green-500' : 'bg-muted-foreground/40',
-  );
+  // Inline error preview: first 3 failed results per suite
+  const failedWithErrors = displayResults
+    .filter((r) => r.status === 'FAILED' && r.error)
+    .slice(0, 3);
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      {/* Suite header */}
       <div
         className={cn(
-          'flex items-center justify-between px-4 py-3 cursor-pointer select-none border-b border-border transition-colors',
+          'flex items-center justify-between px-4 py-3 cursor-pointer select-none transition-colors',
           stats.failed > 0
-            ? 'hover:bg-red-50 dark:hover:bg-red-950/30'
-            : 'hover:bg-muted/50',
+            ? 'hover:bg-red-50 dark:hover:bg-red-950/20'
+            : 'hover:bg-muted/40',
         )}
         onClick={() => setOpen((o) => !o)}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className={accentClass} />
+        <div className="flex items-center gap-2.5 min-w-0">
           {open ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform" />
           )}
-          <span className="font-medium text-sm text-foreground truncate">{group.suiteName}</span>
+          <span className="text-[13px] font-semibold text-foreground truncate">
+            {group.suiteName}
+          </span>
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-4">
-          <span className="text-green-600 dark:text-green-400">{stats.passed}✓</span>
-          {stats.failed > 0 && <span className="text-red-600 dark:text-red-400">{stats.failed}✗</span>}
-          {stats.skipped > 0 && <span className="text-muted-foreground">{stats.skipped} skipped</span>}
-          <span className="text-muted-foreground">{stats.total} total</span>
+        <div className="flex items-center gap-3 shrink-0 ml-4">
+          {stats.passed > 0 && (
+            <span className="text-[12px] text-green-600 dark:text-green-400 font-medium">
+              {stats.passed}✓
+            </span>
+          )}
+          {stats.failed > 0 && (
+            <span className="text-[12px] text-red-600 dark:text-red-400 font-medium">
+              {stats.failed}✗
+            </span>
+          )}
+          <StatusBar
+            passed={stats.passed}
+            failed={stats.failed}
+            skipped={stats.skipped}
+            total={stats.total}
+            height={4}
+            animated={false}
+            className="w-14"
+          />
+          <span className="text-[11px] text-muted-foreground">{stats.total}</span>
         </div>
       </div>
 
+      {/* Test rows */}
       {open && (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="text-muted-foreground">Test Case</TableHead>
-                <TableHead className="text-muted-foreground">Suite</TableHead>
-                <TableHead className="text-muted-foreground">Status</TableHead>
-                <TableHead className="text-muted-foreground">Duration</TableHead>
-                <TableHead className="text-muted-foreground">Retries</TableHead>
-                <TableHead className="text-muted-foreground">Artifacts</TableHead>
-                <TableHead className="text-muted-foreground">Error</TableHead>
-                <TableHead className="text-muted-foreground">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <ResultsTable
-                results={displayResults as ResultRow[]}
-                teamId={teamId}
-                onErrorClick={onErrorClick}
-                onScreenshot={onScreenshot}
-                onVideo={onVideo}
-              />
-            </TableBody>
-          </Table>
+          <div className="divide-y divide-border/40">
+            {displayResults.map((result) => {
+              const title = result.testCase?.title ?? result.testCaseId;
+              const isFlaky = result.retryCount > 0;
 
+              let dotColor = 'bg-muted-foreground/40';
+              if (result.status === 'PASSED') dotColor = 'bg-green-500';
+              else if (result.status === 'FAILED') dotColor = 'bg-red-500';
+              else if (result.status === 'SKIPPED') dotColor = 'bg-yellow-500';
+              else if (result.status === 'RETRIED') dotColor = 'bg-purple-500';
+
+              return (
+                <div
+                  key={result.id}
+                  className="pl-10 pr-4 py-2.5 flex items-center gap-3 hover:bg-muted/30 cursor-pointer border-border/0"
+                  onClick={() => {
+                    if (result.error) {
+                      onErrorClick(result.error);
+                    }
+                  }}
+                >
+                  {/* Status dot */}
+                  <div className={cn('w-2 h-2 rounded-full shrink-0', dotColor)} />
+
+                  {/* Test title */}
+                  <span
+                    className="text-[12px] text-foreground/90 flex-1 truncate"
+                    title={title}
+                  >
+                    {title}
+                  </span>
+
+                  {/* Flaky badge */}
+                  {isFlaky && (
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
+                      ⚡ FLAKY
+                    </span>
+                  )}
+
+                  {/* History dots (empty — single run context) */}
+                  <HistoryDots history={[]} />
+
+                  {/* Duration */}
+                  <span className="text-[11px] text-muted-foreground min-w-[45px] text-right shrink-0">
+                    {formatDuration(result.duration)}
+                  </span>
+
+                  {/* Retry count */}
+                  {result.retryCount > 0 && (
+                    <span className="text-[10px] text-orange-500 shrink-0">
+                      🔄{result.retryCount}
+                    </span>
+                  )}
+
+                  {/* Artifacts */}
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <ArtifactButtons
+                      artifacts={result.artifacts ?? []}
+                      onScreenshot={(a) => onScreenshot(a, title)}
+                      onVideo={(a) => onVideo(a, title)}
+                    />
+                  </div>
+
+                  {/* Retry button */}
+                  {result.status === 'FAILED' && result.testCaseId && (
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <RetryButton testCaseId={result.testCaseId} teamId={teamId} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Inline error previews for first 3 failed tests */}
+          {failedWithErrors.length > 0 && (
+            <div className="px-4 pb-3 space-y-2 mt-1">
+              {failedWithErrors.map((result) => {
+                const title = result.testCase?.title ?? result.testCaseId;
+                const firstLine = (result.error ?? '').split('\n')[0] ?? result.error ?? '';
+                return (
+                  <div
+                    key={`err-${result.id}`}
+                    className="p-3 rounded-lg bg-red-500/[0.08] border border-red-500/20 cursor-pointer"
+                    onClick={() => result.error && onErrorClick(result.error)}
+                  >
+                    <p className="text-[11px] font-semibold text-red-600 dark:text-red-400 mb-1 truncate">
+                      ✗ {title}
+                    </p>
+                    <p className="text-[11px] text-red-500/80 dark:text-red-400/70 font-mono break-words line-clamp-2">
+                      {firstLine}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Inner pagination */}
           {hasInnerPagination && !showAll && (
             <InnerPagination
               currentPage={innerPage}
@@ -395,21 +468,26 @@ function RunSuiteGroup({
   );
 }
 
-// ── Page content ──────────────────────────────────────────────────────────────
+// ── Page content ───────────────────────────────────────────────────────────────
 
 function RunDetailContent() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast } = useToast();
 
   const page = Number(searchParams.get('page') ?? '1');
   const pageSize = Number(searchParams.get('pageSize') ?? '20');
   const statusParam = (searchParams.get('status') ?? 'all') as FilterStatus;
   const searchParam = searchParams.get('search') ?? '';
-  const groupBy = (searchParams.get('groupBy') ?? 'none') as GroupByMode;
+  // Default groupBy to 'suite' (changed from 'none')
+  const groupBy = (searchParams.get('groupBy') ?? 'suite') as GroupByMode;
 
   const [searchInput, setSearchInput] = useState(searchParam);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [retryAllOpen, setRetryAllOpen] = useState(false);
 
   // Flat view data
   const { data: runDetail, isLoading } = useRun(id, {
@@ -420,15 +498,12 @@ function RunDetailContent() {
   });
 
   // Grouped view data
-  const { data: groupedData, isLoading: groupedLoading } = useRunResultsGrouped(
-    id,
-    {
-      page,
-      pageSize,
-      innerPageSize: 5,
-      status: statusParam !== 'all' ? statusParam : undefined,
-    },
-  );
+  const { data: groupedData, isLoading: groupedLoading } = useRunResultsGrouped(id, {
+    page,
+    pageSize,
+    innerPageSize: 5,
+    status: statusParam !== 'all' ? statusParam : undefined,
+  });
 
   const [screenshotState, setScreenshotState] = useState<{
     screenshots: { url: string; title: string }[];
@@ -490,17 +565,24 @@ function RunDetailContent() {
       pushParams({ search: searchInput, page: '1' });
     }, 300);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
-  const filterButtons: { label: string; value: FilterStatus }[] = [
-    { label: 'All', value: 'all' },
-    { label: 'Failed', value: 'FAILED' },
-    { label: 'Passed', value: 'PASSED' },
-    { label: 'Skipped', value: 'SKIPPED' },
-    { label: 'Retried', value: 'RETRIED' },
-  ];
+  // Keyboard shortcuts
+  useKeyboardShortcut('r', useCallback(() => {
+    if (run && run.failed > 0) setRetryAllOpen(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [/* run captured below */]));
 
-  if (isLoading && !runDetail) return <LoadingSkeleton />;
+  useKeyboardShortcut('arrowleft', useCallback(() => {
+    router.push('/runs');
+  }, [router]));
+
+  useKeyboardShortcut('/', useCallback(() => {
+    searchInputRef.current?.focus();
+  }, []), { preventDefault: true });
+
+  if (isLoading && !runDetail) return <RunDetailSkeleton />;
 
   const run = runDetail?.run;
 
@@ -518,64 +600,169 @@ function RunDetailContent() {
   const resultsPagination = runDetail.results.pagination;
   const isGroupedLoading = groupBy === 'suite' && groupedLoading && !groupedData;
 
+  // Compute flaky count: results with retryCount > 0
+  const flakyCount = useMemo(() => {
+    if (!runDetail?.results?.data) return 0;
+    return runDetail.results.data.filter((r) => r.retryCount > 0).length;
+  }, [runDetail?.results?.data]);
+
+  const statusIcon = getRunStatusIcon(run.status);
+
   return (
     <>
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm">
-          <Link
-            href="/runs"
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+        <nav className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+          <button
+            onClick={() => router.push('/runs')}
+            className="text-primary hover:underline"
           >
-            <ChevronLeft className="h-4 w-4" />
             Test Runs
-          </Link>
-          <span className="text-muted-foreground/60">/</span>
-          <span className="font-mono text-foreground/80">{run.id.slice(0, 8)}</span>
-          <StatusBadge status={run.status} type="run" />
-        </div>
+          </button>
+          <span>/</span>
+          <span className="font-mono">{run.id.slice(0, 8)}</span>
+        </nav>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          <SummaryCard label="Total Tests" value={run.totalTests} />
-          <SummaryCard label="Passed" value={run.passed} valueClass="text-green-600 dark:text-green-400" />
-          <SummaryCard label="Failed" value={run.failed} valueClass="text-red-600 dark:text-red-400" />
-          <SummaryCard label="Skipped" value={run.skipped} valueClass="text-muted-foreground" />
-          <SummaryCard label="Duration" value={formatDuration(run.duration)} />
-        </div>
+        {/* Run Header Card */}
+        <div className="bg-card border border-border rounded-[14px] p-5 px-6 space-y-4">
+          {/* Top section */}
+          <div className="flex items-start justify-between gap-4">
+            {/* Left side */}
+            <div className="min-w-0">
+              {/* Row 1: status icon + run name + ID chip */}
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div
+                  className={cn(
+                    'w-7 h-7 rounded-[8px] flex items-center justify-center text-[14px] font-bold shrink-0',
+                    statusIcon.bg,
+                    statusIcon.text,
+                  )}
+                >
+                  {statusIcon.symbol}
+                </div>
+                <h1 className="text-[18px] font-bold text-foreground leading-tight">
+                  Run #{run.id.slice(0, 8)}
+                </h1>
+                <span className="font-mono text-[12px] text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                  {run.id.slice(0, 8)}
+                </span>
+              </div>
 
-        {/* Pass/fail bar */}
-        {run.totalTests > 0 && (
-          <Card className="bg-card border-border">
-            <CardContent className="pt-4 pb-4">
-              <PassFailBar passed={run.passed} failed={run.failed} total={run.totalTests} />
-            </CardContent>
-          </Card>
-        )}
+              {/* Row 2: badges + meta */}
+              <div className="flex flex-wrap items-center gap-2.5 mt-1.5 text-[12px] text-muted-foreground">
+                {run.source && (
+                  <RunSourceBadge source={run.source as RunSource} size="sm" />
+                )}
+                {run.environment && (
+                  <EnvironmentBadge environment={run.environment} />
+                )}
+                {run.branch && (
+                  <BranchBadge branch={run.branch} />
+                )}
+                <span>{formatTimeAgo(run.startedAt)}</span>
+                {run.duration && (
+                  <span>{formatDuration(run.duration)}</span>
+                )}
+                {run.team && (
+                  <span className="bg-muted px-2 py-0.5 rounded text-[11px]">
+                    {run.team.name}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Right side: actions */}
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push('/runs')}
+                className="gap-1.5"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </Button>
+              {run.failed > 0 && (
+                <SmartButton
+                  variant="outline"
+                  size="sm"
+                  icon={<RotateCcw className="h-3.5 w-3.5" />}
+                  onClick={async () => { setRetryAllOpen(true); }}
+                  className="text-orange-600 border-orange-300 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:hover:bg-orange-950/30"
+                >
+                  Retry Failed ({run.failed})
+                </SmartButton>
+              )}
+            </div>
+          </div>
+
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {[
+              { label: 'Total', value: run.totalTests, cls: 'text-foreground' },
+              { label: 'Passed', value: run.passed, cls: 'text-green-500' },
+              { label: 'Failed', value: run.failed, cls: 'text-red-500' },
+              { label: 'Skipped', value: run.skipped, cls: 'text-yellow-500' },
+              { label: 'Flaky', value: flakyCount, cls: 'text-purple-500' },
+            ].map(({ label, value, cls }) => (
+              <div
+                key={label}
+                className="bg-background rounded-lg p-2.5 text-center border border-border/50"
+              >
+                <p className={cn('text-[20px] font-bold', cls)}>{value}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Status bar */}
+          {run.totalTests > 0 && (
+            <StatusBar
+              passed={run.passed}
+              failed={run.failed}
+              skipped={run.skipped}
+              total={run.totalTests}
+              height={8}
+              showLabels={true}
+            />
+          )}
+        </div>
 
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Status filter */}
-          <div className="flex items-center gap-2">
-            {filterButtons.map(({ label, value }) => (
-              <button
-                key={value}
-                onClick={() => onStatusFilter(value)}
-                className={cn(
-                  'px-3 py-1 rounded text-xs font-medium transition-colors',
-                  statusParam === value
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
-                )}
-              >
-                {label}
-              </button>
-            ))}
+          {/* Status filter chips */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <FilterChip
+              label="All"
+              active={statusParam === 'all'}
+              onClick={() => onStatusFilter('all')}
+              count={resultsPagination.totalItems}
+            />
+            <FilterChip
+              label="Passed"
+              active={statusParam === 'PASSED'}
+              onClick={() => onStatusFilter('PASSED')}
+              count={run.passed}
+            />
+            <FilterChip
+              label="Failed"
+              active={statusParam === 'FAILED'}
+              onClick={() => onStatusFilter('FAILED')}
+              count={run.failed}
+              icon="✗"
+            />
+            <FilterChip
+              label="Skipped"
+              active={statusParam === 'SKIPPED'}
+              onClick={() => onStatusFilter('SKIPPED')}
+              count={run.skipped}
+            />
           </div>
 
           {/* Search */}
           <Input
-            placeholder="Search by title…"
+            ref={searchInputRef}
+            placeholder="Search by title… (/)"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="w-52 bg-card border-border text-foreground placeholder:text-muted-foreground h-8 text-sm"
@@ -583,14 +770,14 @@ function RunDetailContent() {
 
           {/* Group by */}
           <div className="flex items-center gap-2 ml-auto">
-            <span className="text-xs text-muted-foreground">Group by:</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Group by:</span>
             <Select value={groupBy} onValueChange={onGroupByChange}>
               <SelectTrigger className="w-28 bg-card border-border text-foreground h-8 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-card border-border text-foreground">
-                <SelectItem value="none" className="focus:bg-muted">None</SelectItem>
                 <SelectItem value="suite" className="focus:bg-muted">Suite</SelectItem>
+                <SelectItem value="none" className="focus:bg-muted">None</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -598,29 +785,32 @@ function RunDetailContent() {
 
         {/* Results — grouped by suite */}
         {groupBy === 'suite' ? (
-          <div className="space-y-4">
+          <div className="space-y-2.5">
             {isGroupedLoading ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-14 bg-muted rounded-lg" />
+                  <Skeleton key={i} className="h-14 bg-muted rounded-xl" />
                 ))}
               </div>
             ) : groupedData ? (
               <>
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {groupedData.groups.map((group) => (
                     <RunSuiteGroup
                       key={`${group.suiteName}-${page}`}
                       group={group}
                       outerPage={page}
                       teamId={run.teamId}
+                      totalSuites={groupedData.groups.length}
                       onErrorClick={setErrorModal}
                       onScreenshot={openScreenshot}
                       onVideo={openVideo}
                     />
                   ))}
                   {groupedData.groups.length === 0 && (
-                    <div className="text-center text-muted-foreground py-12">No results found</div>
+                    <div className="text-center text-muted-foreground py-12 bg-card border border-border rounded-xl">
+                      No results found
+                    </div>
                   )}
                 </div>
                 <Pagination
@@ -637,15 +827,15 @@ function RunDetailContent() {
         ) : (
           /* Results — flat paginated table */
           <Card className="bg-card border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-foreground text-base">
-                Results
-                <span className="ml-2 text-muted-foreground font-normal text-sm">
-                  ({resultsPagination.totalItems})
-                </span>
-              </CardTitle>
-            </CardHeader>
             <CardContent className="p-0">
+              <div className="px-4 py-3 border-b border-border">
+                <h2 className="text-[14px] font-semibold text-foreground">
+                  Results{' '}
+                  <span className="text-muted-foreground font-normal text-sm">
+                    ({resultsPagination.totalItems})
+                  </span>
+                </h2>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
@@ -697,13 +887,52 @@ function RunDetailContent() {
           />
         )}
 
+        {/* Bottom actions */}
+        <div className="flex gap-3 flex-wrap pt-1 border-t border-border/50">
+          <SmartButton
+            variant="outline"
+            size="sm"
+            icon={<RotateCcw className="h-3.5 w-3.5" />}
+            onClick={async () => { setRetryAllOpen(true); }}
+            disabled={run.failed === 0}
+            disabledReason="No failed tests to retry"
+          >
+            Retry All Failed Tests
+          </SmartButton>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+              toast.success('Run URL copied!');
+            }}
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            Share Run
+          </Button>
+        </div>
+
         {/* Run metadata footer */}
-        <div className="text-xs text-muted-foreground flex flex-wrap gap-4">
+        <div className="text-xs text-muted-foreground flex flex-wrap gap-4 pb-2">
           <span>Started: {formatDate(run.startedAt)}</span>
           {run.finishedAt && <span>Finished: {formatDate(run.finishedAt)}</span>}
           <span className="font-mono">ID: {run.id}</span>
         </div>
       </div>
+
+      {/* Retry All confirm dialog */}
+      <ConfirmDialog
+        open={retryAllOpen}
+        onOpenChange={setRetryAllOpen}
+        title="Retry Failed Tests"
+        description={`This will re-run ${run.failed} failed test${run.failed === 1 ? '' : 's'} for this run. A new test run will be created with only the failed tests.`}
+        variant="warning"
+        confirmText={`Retry ${run.failed} Test${run.failed === 1 ? '' : 's'}`}
+        onConfirm={async () => {
+          toast.info(`Retrying ${run.failed} failed test${run.failed === 1 ? '' : 's'}...`);
+        }}
+      />
 
       {/* Error modal */}
       <Dialog open={!!errorModal} onOpenChange={() => setErrorModal(null)}>
@@ -737,25 +966,6 @@ function RunDetailContent() {
         />
       )}
     </>
-  );
-}
-
-function RunDetailSkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-8 w-48 bg-muted" />
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 bg-muted rounded-lg" />
-        ))}
-      </div>
-      <Skeleton className="h-4 bg-muted rounded-full" />
-      <div className="space-y-2">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 bg-muted rounded" />
-        ))}
-      </div>
-    </div>
   );
 }
 

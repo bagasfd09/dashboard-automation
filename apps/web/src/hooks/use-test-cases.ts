@@ -13,6 +13,7 @@ export function useTestCases(filters: TestCaseFilters = {}, page = 1, pageSize =
   const query = useQuery({
     queryKey: ['test-cases', filters, page, pageSize],
     queryFn: () => api.getTestCases({ ...filters, page, pageSize }),
+    staleTime: 30_000,
   });
 
   function prefetchNext() {
@@ -47,6 +48,7 @@ export function useGroupedTestCases(
         // Only pass innerPageSize for suite groupBy (backend only uses it there)
         innerPageSize: groupBy === 'suite' ? innerPageSize : undefined,
       }),
+    staleTime: 30_000,
   });
 }
 
@@ -63,6 +65,7 @@ export function useSuiteTestCases(
     queryFn: () =>
       api.getSuiteTestCases({ suiteName, teamId, page, pageSize, ...filters }),
     enabled,
+    staleTime: 30_000,
   });
 }
 
@@ -71,5 +74,6 @@ export function useTestCase(id: string) {
     queryKey: ['test-case', id],
     queryFn: () => api.getTestCase(id),
     enabled: !!id,
+    staleTime: 10_000,
   });
 }

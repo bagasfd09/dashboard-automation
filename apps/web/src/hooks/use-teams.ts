@@ -5,7 +5,7 @@ export function useTeams() {
   return useQuery({
     queryKey: ['teams'],
     queryFn: () => api.getTeams(),
-    staleTime: 60_000,
+    staleTime: 300_000,
   });
 }
 
@@ -17,9 +17,10 @@ export function useTeamStats(teamId: string) {
   });
 }
 
-export function useOverview() {
+export function useOverview(applicationId?: string) {
   return useQuery({
-    queryKey: ['overview'],
-    queryFn: () => api.getOverview(),
+    queryKey: ['overview', applicationId],
+    queryFn: () => api.getOverview(applicationId),
+    staleTime: 30_000,
   });
 }

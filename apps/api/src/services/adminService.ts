@@ -87,13 +87,20 @@ export interface OverviewStats {
   recentActivity: RecentActivityItem[];
 }
 
-export async function getOverview(teamIds?: string[]): Promise<OverviewStats> {
+export async function getOverview(teamIds?: string[], applicationId?: string): Promise<OverviewStats> {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
   const teamWhere = teamIds ? { id: { in: teamIds } } : {};
-  const runWhere = teamIds ? { teamId: { in: teamIds } } : {};
-  const tcWhere = teamIds ? { teamId: { in: teamIds } } : {};
+  const appFilter = applicationId ? { applicationId } : {};
+  const runWhere = {
+    ...(teamIds ? { teamId: { in: teamIds } } : {}),
+    ...appFilter,
+  };
+  const tcWhere = {
+    ...(teamIds ? { teamId: { in: teamIds } } : {}),
+    ...appFilter,
+  };
 
   const [
     totalTeams,
@@ -117,7 +124,10 @@ export async function getOverview(teamIds?: string[]): Promise<OverviewStats> {
     prisma.testResult.findMany({
       orderBy: { startedAt: 'desc' },
       take: 10,
-      where: teamIds ? { testRun: { teamId: { in: teamIds } } } : {},
+      where: {
+        ...(teamIds ? { testRun: { teamId: { in: teamIds }, ...appFilter } } : {}),
+        ...(!teamIds && applicationId ? { testRun: appFilter } : {}),
+      },
       include: {
         testCase: { select: { title: true } },
         testRun: {

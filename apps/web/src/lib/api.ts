@@ -31,6 +31,23 @@ import type {
   TestPriority,
   TestDifficulty,
   LibraryTestCaseStatus,
+  Release,
+  ReleaseDetail,
+  ReleaseStats,
+  ReleaseStatus,
+  ReleaseChecklistItem,
+  ChecklistItemType,
+  ChecklistItemStatus,
+  RunTestCaseCandidate,
+  FuzzyMatchSuggestion,
+  Application,
+  TaskGroup,
+  TaskGroupDetail,
+  TaskGroupStatus,
+  TaskItemPersonalStatus,
+  TeamTaskProgress,
+  TaskInsight,
+  LibraryPickerData,
 } from './types';
 
 export type { PaginationMeta };
@@ -93,7 +110,12 @@ async function apiFetch<T>(path: string, init?: RequestInit & { _retry?: boolean
     }
   }
 
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    let errBody: unknown;
+    try { errBody = await res.json(); } catch { /* not JSON */ }
+    const msg = (errBody as { error?: string })?.error ?? `API error ${res.status}`;
+    throw Object.assign(new Error(msg), { status: res.status, body: errBody });
+  }
   return res.json() as Promise<T>;
 }
 
@@ -166,7 +188,8 @@ export const api = {
     apiFetch<{ message: string }>(`/api/auth/me/sessions/${tokenId}`, { method: 'DELETE' }),
 
   // ── Overview ──────────────────────────────────────────────────────────────
-  getOverview: () => apiFetch<OverviewStats>('/api/admin/overview'),
+  getOverview: (applicationId?: string) =>
+    apiFetch<OverviewStats>(`/api/admin/overview${applicationId ? `?applicationId=${applicationId}` : ''}`),
 
   // ── Teams ─────────────────────────────────────────────────────────────────
   getTeams: () => apiFetch<TeamSummary[]>('/api/admin/teams'),
@@ -268,7 +291,7 @@ export const api = {
     apiFetch<Paginated<RetryRequest>>(`/api/admin/retries?${qs(p)}`),
 
   // ── Runs ──────────────────────────────────────────────────────────────────
-  getRuns: (p: { page?: number; pageSize?: number; teamId?: string }) =>
+  getRuns: (p: { page?: number; pageSize?: number; teamId?: string; source?: string; branch?: string; environment?: string; applicationId?: string }) =>
     apiFetch<Paginated<TestRun>>(`/api/admin/runs?${qs(p)}`),
 
   getRun: (
@@ -411,10 +434,10 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  reviewSuggestion: (id: string, status: SuggestionStatus) =>
+  reviewSuggestion: (id: string, status: SuggestionStatus, reviewNote?: string) =>
     apiFetch<LibrarySuggestion>(`/api/admin/library/suggestions/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...(reviewNote ? { reviewNote } : {}) }),
     }),
 
   // ── Library — Discussions ─────────────────────────────────────────────────
@@ -455,6 +478,157 @@ export const api = {
       `/api/admin/library/test-cases/${libraryTestCaseId}/dependencies/${dependsOnId}`,
       { method: 'DELETE' },
     ),
+
+  // ── Library — Import from Runs (stub) ────────────────────────────────────
+  // TODO: backend endpoint not yet implemented — returns empty array
+  getRunTestCaseCandidates: (_teamId?: string): Promise<RunTestCaseCandidate[]> =>
+    Promise.resolve([]),
+
+  // TODO: backend endpoint not yet implemented — returns empty array
+  getFuzzyMatches: (_libraryTestCaseId: string): Promise<FuzzyMatchSuggestion[]> =>
+    Promise.resolve([]),
+
+  // ── Releases ──────────────────────────────────────────────────────────────
+  getReleases: (params: { teamId?: string; status?: ReleaseStatus; search?: string; page?: number; pageSize?: number } = {}) =>
+    apiFetch<Paginated<Release>>(`/api/admin/releases?${qs(params)}`),
+
+  getRelease: (id: string) =>
+    apiFetch<ReleaseDetail>(`/api/admin/releases/${id}`),
+
+  createRelease: (data: { name: string; version: string; description?: string; teamId?: string; targetDate?: string }) =>
+    apiFetch<Release>('/api/admin/releases', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateRelease: (id: string, data: { name?: string; version?: string; description?: string; targetDate?: string | null; status?: ReleaseStatus }) =>
+    apiFetch<Release>(`/api/admin/releases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteRelease: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/releases/${id}`, { method: 'DELETE' }),
+
+  markReleased: (id: string) =>
+    apiFetch<{ release: Release; blockers: ReleaseChecklistItem[] }>(`/api/admin/releases/${id}/mark-released`, {
+      method: 'POST',
+    }),
+
+  cancelRelease: (id: string) =>
+    apiFetch<Release>(`/api/admin/releases/${id}/cancel`, { method: 'POST' }),
+
+  getReleaseStats: (id: string) =>
+    apiFetch<ReleaseStats>(`/api/admin/releases/${id}/stats`),
+
+  // ── Release Checklist ─────────────────────────────────────────────────────
+  addChecklistItem: (releaseId: string, data: { type: ChecklistItemType; title: string; description?: string; libraryTestCaseId?: string; testCaseId?: string }) =>
+    apiFetch<ReleaseChecklistItem>(`/api/admin/releases/${releaseId}/checklist`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateChecklistItem: (releaseId: string, itemId: string, data: { title?: string; description?: string; status?: ChecklistItemStatus; notes?: string; order?: number }) =>
+    apiFetch<ReleaseChecklistItem>(`/api/admin/releases/${releaseId}/checklist/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteChecklistItem: (releaseId: string, itemId: string) =>
+    apiFetch<{ message: string }>(`/api/admin/releases/${releaseId}/checklist/${itemId}`, { method: 'DELETE' }),
+
+  // ── Applications ──────────────────────────────────────────────────────────
+  getApplications: () =>
+    apiFetch<Application[]>('/api/admin/applications'),
+
+  getApplication: (id: string) =>
+    apiFetch<Application>(`/api/admin/applications/${id}`),
+
+  createApplication: (data: { name: string; slug?: string; description?: string; icon?: string; color?: string; environments?: string[]; teamId: string }) =>
+    apiFetch<Application>('/api/admin/applications', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateApplication: (id: string, data: { name?: string; description?: string; icon?: string; color?: string; environments?: string[]; isActive?: boolean }) =>
+    apiFetch<Application>(`/api/admin/applications/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteApplication: (id: string) =>
+    apiFetch<void>(`/api/admin/applications/${id}`, { method: 'DELETE' }),
+
+  // ── Task Groups ───────────────────────────────────────────────────────────
+  listTaskGroups: (params?: { status?: TaskGroupStatus; userId?: string; teamId?: string; applicationId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.userId) qs.set('userId', params.userId);
+    if (params?.teamId) qs.set('teamId', params.teamId);
+    if (params?.applicationId) qs.set('applicationId', params.applicationId);
+    const q = qs.toString();
+    return apiFetch<TaskGroup[]>(`/api/admin/task-groups${q ? `?${q}` : ''}`);
+  },
+
+  getTaskGroup: (id: string) =>
+    apiFetch<TaskGroupDetail>(`/api/admin/task-groups/${id}`),
+
+  createTaskGroup: (data: { name: string; userId?: string; teamId?: string; applicationId?: string; branch?: string; dueDate?: string; libraryTestCaseIds?: string[] }) =>
+    apiFetch<TaskGroupDetail>('/api/admin/task-groups', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateTaskGroup: (id: string, data: { name?: string; branch?: string; dueDate?: string | null; status?: TaskGroupStatus; applicationId?: string | null }) =>
+    apiFetch<TaskGroup>(`/api/admin/task-groups/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteTaskGroup: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/task-groups/${id}`, { method: 'DELETE' }),
+
+  addTaskGroupItems: (id: string, libraryTestCaseIds: string[]) =>
+    apiFetch<{ added: number; duplicates: number }>(`/api/admin/task-groups/${id}/items`, {
+      method: 'POST',
+      body: JSON.stringify({ libraryTestCaseIds }),
+    }),
+
+  removeTaskGroupItem: (id: string, itemId: string) =>
+    apiFetch<{ message: string }>(`/api/admin/task-groups/${id}/items/${itemId}`, { method: 'DELETE' }),
+
+  updateTaskGroupItem: (id: string, itemId: string, data: { personalStatus?: TaskItemPersonalStatus; skippedReason?: string | null; note?: string | null }) =>
+    apiFetch<unknown>(`/api/admin/task-groups/${id}/items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  reorderTaskGroupItems: (id: string, itemIds: string[]) =>
+    apiFetch<{ message: string }>(`/api/admin/task-groups/${id}/reorder`, {
+      method: 'PATCH',
+      body: JSON.stringify({ itemIds }),
+    }),
+
+  getTaskProgress: (params?: { teamId?: string; applicationId?: string; status?: TaskGroupStatus }) => {
+    const qs = new URLSearchParams();
+    if (params?.teamId) qs.set('teamId', params.teamId);
+    if (params?.applicationId) qs.set('applicationId', params.applicationId);
+    if (params?.status) qs.set('status', params.status);
+    const q = qs.toString();
+    return apiFetch<TeamTaskProgress>(`/api/admin/task-groups/progress${q ? `?${q}` : ''}`);
+  },
+
+  getTaskInsights: (params?: { teamId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.teamId) qs.set('teamId', params.teamId);
+    const q = qs.toString();
+    return apiFetch<{ insights: TaskInsight[] }>(`/api/admin/task-groups/insights${q ? `?${q}` : ''}`);
+  },
+
+  getTaskGroupLibraryPicker: (groupId: string, params?: { applicationId?: string }) => {
+    const q = params?.applicationId ? `?applicationId=${params.applicationId}` : '';
+    return apiFetch<LibraryPickerData>(`/api/admin/task-groups/${groupId}/library-picker${q}`);
+  },
 };
 
 export { BASE, ADMIN_KEY };

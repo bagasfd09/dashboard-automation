@@ -37,10 +37,14 @@ export type {
   Release,
   ReleaseTestRun,
   ReleaseChecklistItem,
+  Application,
+  TaskGroup,
+  TaskGroupItem,
   Prisma,
 } from '@prisma/client';
 export {
   RunStatus,
+  RunSource,
   TestStatus,
   ArtifactType,
   RetryRequestStatus,
@@ -54,4 +58,6 @@ export {
   ReleaseStatus,
   ChecklistItemType,
   ChecklistItemStatus,
+  TaskGroupStatus,
+  TaskItemPersonalStatus,
 } from '@prisma/client';

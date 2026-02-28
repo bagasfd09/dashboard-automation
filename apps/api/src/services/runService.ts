@@ -1,5 +1,5 @@
 import { prisma } from '@qc-monitor/db';
-import type { TestRun, RunStatus } from '@qc-monitor/db';
+import type { TestRun, RunStatus, RunSource } from '@qc-monitor/db';
 import { eventService } from './eventService.js';
 import { onRunFinished } from './release.service.js';
 
@@ -71,8 +71,23 @@ export interface RunResultsGrouped {
 
 // ── Create / Update ───────────────────────────────────────────────────────────
 
-export async function createRun(teamId: string): Promise<TestRun> {
-  const run = await prisma.testRun.create({ data: { teamId } });
+interface CreateRunOptions {
+  source?: RunSource;
+  branch?: string | null;
+  environment?: string | null;
+  applicationId?: string | null;
+}
+
+export async function createRun(teamId: string, options?: CreateRunOptions): Promise<TestRun> {
+  const run = await prisma.testRun.create({
+    data: {
+      teamId,
+      source: options?.source ?? 'LOCAL',
+      branch: options?.branch ?? null,
+      environment: options?.environment ?? null,
+      applicationId: options?.applicationId ?? null,
+    },
+  });
   eventService.broadcast(teamId, 'run:started', run);
   return run;
 }
@@ -126,11 +141,19 @@ export async function updateRun(
 
 // ── List ──────────────────────────────────────────────────────────────────────
 
+interface ListRunsOptions {
+  source?: RunSource;
+  branch?: string;
+  environment?: string;
+  applicationId?: string;
+}
+
 export async function listRuns(
   teamId: string | undefined,
   page: number | string = 1,
   pageSize: number | string = 20,
   scopeTeamIds?: string[],
+  options: ListRunsOptions = {},
 ): Promise<PaginatedResult<TestRunWithTeam>> {
   const _page = Number(page);
   const _pageSize = Number(pageSize);
@@ -140,6 +163,10 @@ export async function listRuns(
     : scopeTeamIds
       ? { teamId: { in: scopeTeamIds } }
       : {};
+  if (options.source) where['source'] = options.source;
+  if (options.branch) where['branch'] = { contains: options.branch, mode: 'insensitive' };
+  if (options.environment) where['environment'] = options.environment;
+  if (options.applicationId) where['applicationId'] = options.applicationId;
   const [items, totalItems] = await Promise.all([
     prisma.testRun.findMany({
       where,
