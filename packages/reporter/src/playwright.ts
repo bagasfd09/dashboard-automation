@@ -149,7 +149,11 @@ export default class QCMonitorPlaywrightReporter implements Reporter {
     // Sync + create run in parallel
     const [syncedCases, runId] = await Promise.all([
       this.client.syncTestCases(toSync),
-      this.client.createRun(),
+      this.client.createRun({
+        source: this.config.source,
+        branch: this.config.branch,
+        environment: this.config.environment,
+      }),
     ]);
 
     this.runId = runId;

@@ -1,4 +1,5 @@
 export type RunStatus = 'RUNNING' | 'PASSED' | 'FAILED' | 'CANCELLED';
+export type RunSource = 'LOCAL' | 'CI' | 'MANUAL';
 export type TestStatus = 'PASSED' | 'FAILED' | 'SKIPPED' | 'RETRIED';
 export type ArtifactType = 'SCREENSHOT' | 'VIDEO' | 'TRACE' | 'LOG';
 
@@ -90,6 +91,9 @@ export interface TestRun {
   id: string;
   teamId: string;
   status: RunStatus;
+  source: RunSource;
+  branch: string | null;
+  environment: string | null;
   passed: number;
   failed: number;
   skipped: number;
@@ -373,6 +377,245 @@ export interface LibraryCoverageStats {
   coverage: number;
   byStatus: { status: LibraryTestCaseStatus; count: number }[];
   byPriority: { priority: TestPriority; count: number }[];
+}
+
+// ── Application types ─────────────────────────────────────────────────────────
+
+export interface Application {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  environments: string[];
+  isActive: boolean;
+  teamId: string;
+  team?: { id: string; name: string };
+  createdById: string;
+  createdBy?: { id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+  _count?: { testRuns: number; testCases: number; releases: number };
+}
+
+// ── Release types ─────────────────────────────────────────────────────────────
+
+export type ReleaseStatus = 'DRAFT' | 'IN_PROGRESS' | 'BLOCKED' | 'RELEASED' | 'CANCELLED';
+export type ChecklistItemType = 'AUTOMATED_TEST' | 'MANUAL_TEST';
+export type ChecklistItemStatus = 'PENDING' | 'IN_PROGRESS' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'SKIPPED';
+
+export interface ReleaseChecklistItem {
+  id: string;
+  releaseId: string;
+  type: ChecklistItemType;
+  title: string;
+  description: string | null;
+  status: ChecklistItemStatus;
+  libraryTestCaseId: string | null;
+  testCaseId: string | null;
+  order: number;
+  assignedToId: string | null;
+  completedAt: string | null;
+  notes: string | null;
+  libraryTestCase?: { id: string; title: string; priority: TestPriority; collection?: { id: string; name: string } | null } | null;
+  testCase?: { id: string; title: string; filePath: string } | null;
+  assignedTo?: { id: string; name: string } | null;
+}
+
+export interface Release {
+  id: string;
+  name: string;
+  version: string;
+  description: string | null;
+  teamId: string | null;
+  team?: { id: string; name: string } | null;
+  status: ReleaseStatus;
+  targetDate: string | null;
+  releasedAt: string | null;
+  createdById: string;
+  createdBy?: { id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+  _count?: { checklistItems: number };
+}
+
+export interface ReleaseDetail extends Release {
+  checklistItems: ReleaseChecklistItem[];
+  testRuns: {
+    releaseId: string;
+    testRunId: string;
+    createdAt: string;
+    testRun: { id: string; status: RunStatus; passed: number; failed: number; totalTests: number; startedAt: string };
+  }[];
+}
+
+export interface ReleaseStats {
+  checklistProgress: { total: number; completed: number; progress: number; byStatus: Record<string, number> };
+  testRuns: { id: string; status: RunStatus; passed: number; failed: number; skipped: number; totalTests: number; startedAt: string; finishedAt: string | null }[];
+}
+
+// ── Task Group types ─────────────────────────────────────────────────────────
+
+export type TaskGroupStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+export type TaskItemPersonalStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SKIPPED';
+export type TaskItemResultStatus = 'PASSED' | 'FAILED' | null;
+
+export interface TaskGroupProgress {
+  total: number;
+  localPassed: number;
+  localFailed: number;
+  envPassed: number;
+  envFailed: number;
+  skipped: number;
+  notStarted: number;
+  inProgress: number;
+}
+
+export interface TaskGroupItem {
+  id: string;
+  taskGroupId: string;
+  libraryTestCaseId: string;
+  personalStatus: TaskItemPersonalStatus;
+  skippedReason: string | null;
+  localResultStatus: string | null;
+  localTestRunId: string | null;
+  localMatchedAt: string | null;
+  envResultStatus: string | null;
+  envTestRunId: string | null;
+  envMatchedAt: string | null;
+  note: string | null;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  libraryTestCase: {
+    id: string;
+    title: string;
+    priority: TestPriority;
+    status: LibraryTestCaseStatus;
+    collection?: { name: string } | null;
+  };
+  localTestRun?: { id: string; startedAt: string } | null;
+  envTestRun?: { id: string; startedAt: string } | null;
+}
+
+export interface TaskGroup {
+  id: string;
+  name: string;
+  userId: string;
+  user: { id: string; name: string; email: string };
+  createdById: string;
+  createdBy: { id: string; name: string };
+  teamId: string;
+  applicationId: string | null;
+  application?: { id: string; name: string; icon: string | null } | null;
+  branch: string | null;
+  dueDate: string | null;
+  status: TaskGroupStatus;
+  createdAt: string;
+  updatedAt: string;
+  progress: TaskGroupProgress;
+  isOverdue: boolean;
+}
+
+export interface TaskGroupDetail extends TaskGroup {
+  items: TaskGroupItem[];
+}
+
+export interface TaskInsight {
+  type: string;
+  severity: 'error' | 'warning' | 'info' | 'success';
+  message: string;
+  itemId?: string;
+  taskGroupId?: string;
+  userId?: string;
+}
+
+export interface MemberTaskSummary {
+  user: { id: string; name: string; email: string };
+  taskGroups: (TaskGroup & { lastActivity: string | null })[];
+  summary: {
+    totalGroups: number;
+    totalItems: number;
+    completedItems: number;
+    overdueGroups: number;
+    lastActivity: string | null;
+    warning?: 'NO_ACTIVE_TASKS';
+  };
+}
+
+export interface TeamTaskProgress {
+  members: MemberTaskSummary[];
+  teamSummary: {
+    totalMembers: number;
+    membersWithTasks: number;
+    membersWithoutTasks: number;
+    totalItems: number;
+    localPassRate: number;
+    envPassRate: number;
+    overdueGroups: number;
+    sprintReadiness: 'READY' | 'NOT_READY';
+  };
+}
+
+export interface LibraryPickerTestCase {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: string;
+  status: string;
+  alreadyInThisGroup: boolean;
+  otherGroups: { id: string; name: string }[];
+}
+
+export interface LibraryPickerCollection {
+  id: string;
+  name: string;
+  icon: string | null;
+  applicationId: string | null;
+  testCases: LibraryPickerTestCase[];
+  totalCount: number;
+  availableCount: number;
+}
+
+export interface LibraryPickerSuggestionItem {
+  id: string;
+  title: string;
+  priority: string;
+  collection: { id: string; name: string; icon: string | null } | null;
+  alreadyInThisGroup: boolean;
+}
+
+export interface LibraryPickerData {
+  suggestions: {
+    count: number;
+    items: LibraryPickerSuggestionItem[];
+  };
+  collections: LibraryPickerCollection[];
+}
+
+// ── Import from Runs / Fuzzy Match ──────────────────────────────────────────
+
+export interface RunTestCaseCandidate {
+  id: string;
+  title: string;
+  filePath: string;
+  status: TestStatus;
+  runId: string;
+  runStartedAt: string;
+  teamId: string | null;
+  teamName: string | null;
+  alreadyInLibrary: boolean;
+  similarLibraryTitle: string | null;
+}
+
+export interface FuzzyMatchSuggestion {
+  testCaseId: string;
+  testCaseTitle: string;
+  filePath: string;
+  teamName: string | null;
+  score: number;
+  matchType: 'exact' | 'high' | 'medium' | 'low';
 }
 
 export interface TeamDetailStats {

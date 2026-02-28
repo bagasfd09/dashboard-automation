@@ -1,0 +1,555 @@
+import type {
+  Paginated,
+  PaginationMeta,
+  TestCase,
+  TestCaseDetail,
+  TestRun,
+  RunDetailPaginated,
+  RunResultsGrouped,
+  TeamSummary,
+  TeamDetailStats,
+  OverviewStats,
+  GroupedTestCases,
+  RetryRequest,
+  LoginResponse,
+  AuthUser,
+  Session,
+  UserRecord,
+  ActivityLogEntry,
+  InviteRecord,
+  UserRole,
+  LibraryCollection,
+  LibraryTestCase,
+  LibraryTestCaseDetail,
+  LibraryTestCaseVersion,
+  LibrarySuggestion,
+  LibraryDiscussion,
+  LibraryBookmark,
+  LibraryCoverageStats,
+  SuggestionType,
+  SuggestionStatus,
+  TestPriority,
+  TestDifficulty,
+  LibraryTestCaseStatus,
+  Release,
+  ReleaseDetail,
+  ReleaseStats,
+  ReleaseStatus,
+  ReleaseChecklistItem,
+  ChecklistItemType,
+  ChecklistItemStatus,
+  RunTestCaseCandidate,
+  FuzzyMatchSuggestion,
+  Application,
+} from './types';
+
+export type { PaginationMeta };
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY ?? '';
+
+// ── In-memory access token ────────────────────────────────────────────────────
+
+let _accessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  _accessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return _accessToken;
+}
+
+// ── Core fetch ────────────────────────────────────────────────────────────────
+
+async function apiFetch<T>(path: string, init?: RequestInit & { _retry?: boolean }): Promise<T> {
+  const headers: Record<string, string> = {
+    // Only set JSON content-type when there is a body to avoid Fastify FST_ERR_CTP_EMPTY_JSON_BODY
+    ...(init?.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    ...(init?.headers as Record<string, string>),
+  };
+
+  if (_accessToken) {
+    headers['Authorization'] = `Bearer ${_accessToken}`;
+  } else if (ADMIN_KEY) {
+    headers['x-admin-key'] = ADMIN_KEY;
+  }
+
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    credentials: 'include',
+    headers,
+  });
+
+  // Auto-refresh on 401 (once)
+  if (res.status === 401 && !init?._retry) {
+    try {
+      const refreshed = await fetch(`${BASE}/api/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (refreshed.ok) {
+        const data = (await refreshed.json()) as { accessToken: string };
+        setAccessToken(data.accessToken);
+        return apiFetch<T>(path, { ...init, _retry: true });
+      }
+    } catch {
+      // ignore, fall through to throw
+    }
+    setAccessToken(null);
+    // Dispatch event so AuthProvider can redirect
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    }
+  }
+
+  if (!res.ok) {
+    let errBody: unknown;
+    try { errBody = await res.json(); } catch { /* not JSON */ }
+    const msg = (errBody as { error?: string })?.error ?? `API error ${res.status}`;
+    throw Object.assign(new Error(msg), { status: res.status, body: errBody });
+  }
+  return res.json() as Promise<T>;
+}
+
+function qs(params: Record<string, unknown>): string {
+  return new URLSearchParams(
+    Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== '')
+      .map(([k, v]) => [k, String(v)])
+  ).toString();
+}
+
+export const api = {
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  login: (email: string, password: string) =>
+    apiFetch<LoginResponse>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+
+  logout: () =>
+    apiFetch<{ message: string }>('/api/auth/logout', { method: 'POST' }),
+
+  // Use raw fetch — bypasses the 401 auto-refresh loop in apiFetch so that
+  // a missing/expired cookie on page load is handled gracefully by AuthProvider
+  // without dispatching auth:unauthorized.
+  refreshToken: async (): Promise<{ accessToken: string; user: AuthUser }> => {
+    const res = await fetch(`${BASE}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error(`Refresh failed: ${res.status}`);
+    return res.json() as Promise<{ accessToken: string; user: AuthUser }>;
+  },
+
+  getMe: () => apiFetch<AuthUser>('/api/auth/me'),
+
+  updateMe: (name: string) =>
+    apiFetch<{ message: string }>('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiFetch<{ message: string }>('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
+  forgotPassword: (email: string) =>
+    apiFetch<{ message: string }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    apiFetch<{ message: string }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    }),
+
+  acceptInvite: (token: string, name: string, password: string) =>
+    apiFetch<LoginResponse>('/api/auth/accept-invite', {
+      method: 'POST',
+      body: JSON.stringify({ token, name, password }),
+    }),
+
+  getSessions: () => apiFetch<Session[]>('/api/auth/me/sessions'),
+
+  revokeSession: (tokenId: string) =>
+    apiFetch<{ message: string }>(`/api/auth/me/sessions/${tokenId}`, { method: 'DELETE' }),
+
+  // ── Overview ──────────────────────────────────────────────────────────────
+  getOverview: () => apiFetch<OverviewStats>('/api/admin/overview'),
+
+  // ── Teams ─────────────────────────────────────────────────────────────────
+  getTeams: () => apiFetch<TeamSummary[]>('/api/admin/teams'),
+  getTeamStats: (teamId: string) =>
+    apiFetch<TeamDetailStats>(`/api/admin/teams/${teamId}/stats`),
+  createTeam: (name: string) =>
+    apiFetch<{ id: string; name: string }>('/api/admin/teams', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  updateTeam: (id: string, name: string) =>
+    apiFetch<{ id: string; name: string }>(`/api/admin/teams/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+  deleteTeam: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/teams/${id}`, { method: 'DELETE' }),
+  rotateApiKey: (teamId: string) =>
+    apiFetch<{ message: string; newKey: string }>(`/api/admin/teams/${teamId}/api-keys/rotate`, { method: 'POST' }),
+  getApiKeys: (teamId: string) =>
+    apiFetch<{ id: string; key: string; teamId: string }[]>(`/api/admin/teams/${teamId}/api-keys`),
+
+  // ── Users ─────────────────────────────────────────────────────────────────
+  getUsers: (p: { role?: UserRole; teamId?: string; search?: string; isActive?: string; page?: number; pageSize?: number }) =>
+    apiFetch<Paginated<UserRecord>>(`/api/admin/users?${qs(p)}`),
+
+  getUser: (id: string) => apiFetch<UserRecord>(`/api/admin/users/${id}`),
+
+  inviteUser: (data: { email: string; role: UserRole; teamIds?: string[] }) =>
+    apiFetch<{ invite: InviteRecord; inviteLink: string }>('/api/admin/users/invite', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateUser: (id: string, data: { name?: string; role?: UserRole; isActive?: boolean; teamIds?: string[] }) =>
+    apiFetch<{ message: string }>(`/api/admin/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteUser: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/users/${id}`, { method: 'DELETE' }),
+
+  resetUserPassword: (id: string) =>
+    apiFetch<{ resetLink: string }>(`/api/admin/users/${id}/reset-password`, { method: 'POST' }),
+
+  forceLogout: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/users/${id}/force-logout`, { method: 'POST' }),
+
+  toggleUserActive: (id: string, isActive: boolean) =>
+    apiFetch<{ message: string }>(`/api/admin/users/${id}/toggle-active`, {
+      method: 'POST',
+      body: JSON.stringify({ isActive }),
+    }),
+
+  // ── Activity log ──────────────────────────────────────────────────────────
+  getActivityLog: (p: { teamId?: string; userId?: string; action?: string; page?: number; pageSize?: number }) =>
+    apiFetch<Paginated<ActivityLogEntry>>(`/api/admin/activity-log?${qs(p)}`),
+
+  // ── Test cases ────────────────────────────────────────────────────────────
+  getTestCases: (p: {
+    search?: string;
+    status?: string;
+    tag?: string;
+    teamId?: string;
+    page?: number;
+    pageSize?: number;
+  }) => apiFetch<Paginated<TestCase>>(`/api/admin/test-cases?${qs(p)}`),
+
+  getTestCasesGrouped: (p: {
+    search?: string;
+    tag?: string;
+    teamId?: string;
+    groupBy: 'suite' | 'filePath' | 'tag' | 'team';
+    page?: number;
+    pageSize?: number;
+    innerPageSize?: number;
+  }) => apiFetch<GroupedTestCases>(`/api/admin/test-cases?${qs(p)}`),
+
+  getSuiteTestCases: (p: {
+    suiteName: string;
+    teamId?: string;
+    page: number;
+    pageSize: number;
+    search?: string;
+    tag?: string;
+  }) => apiFetch<Paginated<TestCase>>(`/api/admin/test-cases/by-suite?${qs(p)}`),
+
+  getTestCase: (id: string) =>
+    apiFetch<TestCaseDetail>(`/api/admin/test-cases/${id}`),
+
+  // ── Retries ───────────────────────────────────────────────────────────────
+  requestRetry: (testCaseId: string, teamId: string) =>
+    apiFetch<RetryRequest>('/api/admin/retry', {
+      method: 'POST',
+      body: JSON.stringify({ testCaseId, teamId }),
+    }),
+  getRetries: (p: { teamId?: string; page?: number; pageSize?: number }) =>
+    apiFetch<Paginated<RetryRequest>>(`/api/admin/retries?${qs(p)}`),
+
+  // ── Runs ──────────────────────────────────────────────────────────────────
+  getRuns: (p: { page?: number; pageSize?: number; teamId?: string; source?: string; branch?: string; environment?: string }) =>
+    apiFetch<Paginated<TestRun>>(`/api/admin/runs?${qs(p)}`),
+
+  getRun: (
+    id: string,
+    params?: { page?: number; pageSize?: number; status?: string; search?: string },
+  ) => apiFetch<RunDetailPaginated>(`/api/admin/runs/${id}?${qs(params ?? {})}`),
+
+  getRunResultsGrouped: (
+    id: string,
+    params?: { page?: number; pageSize?: number; innerPageSize?: number; status?: string },
+  ) => apiFetch<RunResultsGrouped>(`/api/admin/runs/${id}/results-grouped?${qs(params ?? {})}`),
+
+  // ── Artifacts (via Next.js proxy route — handles auth server-side) ────────
+  artifactProxyUrl: (id: string) => `/api/artifact-proxy/${id}`,
+
+  // ── Library — Collections ─────────────────────────────────────────────────
+  getCollections: (teamId?: string) =>
+    apiFetch<LibraryCollection[]>(`/api/admin/library/collections${teamId ? `?teamId=${teamId}` : ''}`),
+
+  createCollection: (data: { name: string; description?: string; icon?: string; teamId?: string }) =>
+    apiFetch<LibraryCollection>('/api/admin/library/collections', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateCollection: (id: string, data: { name?: string; description?: string; icon?: string }) =>
+    apiFetch<LibraryCollection>(`/api/admin/library/collections/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteCollection: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/library/collections/${id}`, { method: 'DELETE' }),
+
+  // ── Library — Test Cases ──────────────────────────────────────────────────
+  getLibraryTestCases: (params: {
+    collectionId?: string;
+    status?: LibraryTestCaseStatus;
+    priority?: TestPriority;
+    search?: string;
+    tags?: string;
+    page?: number;
+    pageSize?: number;
+  }) => apiFetch<Paginated<LibraryTestCase>>(`/api/admin/library/test-cases?${qs(params)}`),
+
+  getLibraryTestCase: (id: string) =>
+    apiFetch<LibraryTestCaseDetail>(`/api/admin/library/test-cases/${id}`),
+
+  createLibraryTestCase: (data: {
+    title: string;
+    description?: string;
+    priority?: TestPriority;
+    difficulty?: TestDifficulty;
+    collectionId?: string;
+    tags?: string[];
+    steps?: string;
+    preconditions?: string;
+    expectedOutcome?: string;
+  }) =>
+    apiFetch<LibraryTestCase>('/api/admin/library/test-cases', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateLibraryTestCase: (
+    id: string,
+    data: {
+      title?: string;
+      description?: string;
+      priority?: TestPriority;
+      difficulty?: TestDifficulty;
+      status?: LibraryTestCaseStatus;
+      collectionId?: string;
+      tags?: string[];
+      steps?: string;
+      preconditions?: string;
+      expectedOutcome?: string;
+      changeNotes?: string;
+    },
+  ) =>
+    apiFetch<LibraryTestCase>(`/api/admin/library/test-cases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteLibraryTestCase: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/library/test-cases/${id}`, { method: 'DELETE' }),
+
+  // ── Library — Links ───────────────────────────────────────────────────────
+  linkTestCase: (libraryTestCaseId: string, testCaseId: string) =>
+    apiFetch<{ id: string }>(`/api/admin/library/test-cases/${libraryTestCaseId}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ testCaseId }),
+    }),
+
+  unlinkTestCase: (libraryTestCaseId: string, testCaseId: string) =>
+    apiFetch<{ message: string }>(
+      `/api/admin/library/test-cases/${libraryTestCaseId}/link/${testCaseId}`,
+      { method: 'DELETE' },
+    ),
+
+  // ── Library — Coverage ────────────────────────────────────────────────────
+  getCoverageStats: (collectionId?: string) =>
+    apiFetch<LibraryCoverageStats>(
+      `/api/admin/library/coverage${collectionId ? `?collectionId=${collectionId}` : ''}`,
+    ),
+
+  getCoverageGaps: (olderThanDays?: number) =>
+    apiFetch<LibraryTestCase[]>(
+      `/api/admin/library/gaps${olderThanDays !== undefined ? `?olderThanDays=${olderThanDays}` : ''}`,
+    ),
+
+  runAutoMatch: () =>
+    apiFetch<{ matched: number; gaps: number }>('/api/admin/library/auto-match', { method: 'POST' }),
+
+  // ── Library — Versions ────────────────────────────────────────────────────
+  getVersions: (testCaseId: string, page = 1, pageSize = 10) =>
+    apiFetch<Paginated<LibraryTestCaseVersion>>(
+      `/api/admin/library/test-cases/${testCaseId}/versions?page=${page}&pageSize=${pageSize}`,
+    ),
+
+  rollbackVersion: (testCaseId: string, version: number) =>
+    apiFetch<LibraryTestCase>(`/api/admin/library/test-cases/${testCaseId}/rollback`, {
+      method: 'POST',
+      body: JSON.stringify({ version }),
+    }),
+
+  // ── Library — Suggestions ─────────────────────────────────────────────────
+  getAllSuggestions: (params: { status?: SuggestionStatus; page?: number; pageSize?: number }) =>
+    apiFetch<Paginated<LibrarySuggestion>>(`/api/admin/library/suggestions?${qs(params)}`),
+
+  getSuggestions: (testCaseId: string, params: { status?: SuggestionStatus; page?: number; pageSize?: number }) =>
+    apiFetch<Paginated<LibrarySuggestion>>(
+      `/api/admin/library/test-cases/${testCaseId}/suggestions?${qs(params)}`,
+    ),
+
+  createSuggestion: (testCaseId: string, data: { type: SuggestionType; content: string }) =>
+    apiFetch<LibrarySuggestion>(`/api/admin/library/test-cases/${testCaseId}/suggestions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  reviewSuggestion: (id: string, status: SuggestionStatus, reviewNote?: string) =>
+    apiFetch<LibrarySuggestion>(`/api/admin/library/suggestions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, ...(reviewNote ? { reviewNote } : {}) }),
+    }),
+
+  // ── Library — Discussions ─────────────────────────────────────────────────
+  getDiscussions: (testCaseId: string, page = 1, pageSize = 20) =>
+    apiFetch<Paginated<LibraryDiscussion>>(
+      `/api/admin/library/test-cases/${testCaseId}/discussions?page=${page}&pageSize=${pageSize}`,
+    ),
+
+  postDiscussion: (testCaseId: string, content: string) =>
+    apiFetch<LibraryDiscussion>(`/api/admin/library/test-cases/${testCaseId}/discussions`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  deleteDiscussion: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/library/discussions/${id}`, { method: 'DELETE' }),
+
+  // ── Library — Bookmarks ───────────────────────────────────────────────────
+  toggleBookmark: (testCaseId: string) =>
+    apiFetch<{ bookmarked: boolean }>(`/api/admin/library/test-cases/${testCaseId}/bookmark`, {
+      method: 'POST',
+    }),
+
+  getBookmarks: (page = 1, pageSize = 20) =>
+    apiFetch<Paginated<LibraryBookmark>>(
+      `/api/admin/library/bookmarks?page=${page}&pageSize=${pageSize}`,
+    ),
+
+  // ── Library — Dependencies ────────────────────────────────────────────────
+  addDependency: (libraryTestCaseId: string, dependsOnId: string) =>
+    apiFetch<{ id: string }>(`/api/admin/library/test-cases/${libraryTestCaseId}/dependencies`, {
+      method: 'POST',
+      body: JSON.stringify({ dependsOnId }),
+    }),
+
+  removeDependency: (libraryTestCaseId: string, dependsOnId: string) =>
+    apiFetch<{ message: string }>(
+      `/api/admin/library/test-cases/${libraryTestCaseId}/dependencies/${dependsOnId}`,
+      { method: 'DELETE' },
+    ),
+
+  // ── Library — Import from Runs (stub) ────────────────────────────────────
+  // TODO: backend endpoint not yet implemented — returns empty array
+  getRunTestCaseCandidates: (_teamId?: string): Promise<RunTestCaseCandidate[]> =>
+    Promise.resolve([]),
+
+  // TODO: backend endpoint not yet implemented — returns empty array
+  getFuzzyMatches: (_libraryTestCaseId: string): Promise<FuzzyMatchSuggestion[]> =>
+    Promise.resolve([]),
+
+  // ── Releases ──────────────────────────────────────────────────────────────
+  getReleases: (params: { teamId?: string; status?: ReleaseStatus; search?: string; page?: number; pageSize?: number } = {}) =>
+    apiFetch<Paginated<Release>>(`/api/admin/releases?${qs(params)}`),
+
+  getRelease: (id: string) =>
+    apiFetch<ReleaseDetail>(`/api/admin/releases/${id}`),
+
+  createRelease: (data: { name: string; version: string; description?: string; teamId?: string; targetDate?: string }) =>
+    apiFetch<Release>('/api/admin/releases', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateRelease: (id: string, data: { name?: string; version?: string; description?: string; targetDate?: string | null; status?: ReleaseStatus }) =>
+    apiFetch<Release>(`/api/admin/releases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteRelease: (id: string) =>
+    apiFetch<{ message: string }>(`/api/admin/releases/${id}`, { method: 'DELETE' }),
+
+  markReleased: (id: string) =>
+    apiFetch<{ release: Release; blockers: ReleaseChecklistItem[] }>(`/api/admin/releases/${id}/mark-released`, {
+      method: 'POST',
+    }),
+
+  cancelRelease: (id: string) =>
+    apiFetch<Release>(`/api/admin/releases/${id}/cancel`, { method: 'POST' }),
+
+  getReleaseStats: (id: string) =>
+    apiFetch<ReleaseStats>(`/api/admin/releases/${id}/stats`),
+
+  // ── Release Checklist ─────────────────────────────────────────────────────
+  addChecklistItem: (releaseId: string, data: { type: ChecklistItemType; title: string; description?: string; libraryTestCaseId?: string; testCaseId?: string }) =>
+    apiFetch<ReleaseChecklistItem>(`/api/admin/releases/${releaseId}/checklist`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateChecklistItem: (releaseId: string, itemId: string, data: { title?: string; description?: string; status?: ChecklistItemStatus; notes?: string; order?: number }) =>
+    apiFetch<ReleaseChecklistItem>(`/api/admin/releases/${releaseId}/checklist/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteChecklistItem: (releaseId: string, itemId: string) =>
+    apiFetch<{ message: string }>(`/api/admin/releases/${releaseId}/checklist/${itemId}`, { method: 'DELETE' }),
+
+  // ── Applications ──────────────────────────────────────────────────────────
+  getApplications: () =>
+    apiFetch<Application[]>('/api/admin/applications'),
+
+  getApplication: (id: string) =>
+    apiFetch<Application>(`/api/admin/applications/${id}`),
+
+  createApplication: (data: { name: string; slug?: string; description?: string; icon?: string; color?: string; environments?: string[]; teamId: string }) =>
+    apiFetch<Application>('/api/admin/applications', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateApplication: (id: string, data: { name?: string; description?: string; icon?: string; color?: string; environments?: string[]; isActive?: boolean }) =>
+    apiFetch<Application>(`/api/admin/applications/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteApplication: (id: string) =>
+    apiFetch<void>(`/api/admin/applications/${id}`, { method: 'DELETE' }),
+};
+
+export { BASE, ADMIN_KEY };

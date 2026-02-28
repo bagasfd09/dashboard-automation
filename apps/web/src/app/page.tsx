@@ -2,7 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { useOverview, useTeams } from '@/hooks/use-teams';
+import { useAppContext } from '@/providers/AppContextProvider';
 import { StatusBadge } from '@/components/status-badge';
+import { EnvironmentBadge } from '@/components/ui/environment-badge';
 import {
   Card,
   CardContent,
@@ -58,14 +60,41 @@ function formatDate(iso: string | null) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { data: overview, isLoading: overviewLoading } = useOverview();
+  const { selectedApp, selectedEnv } = useAppContext();
+  const { data: overview, isLoading: overviewLoading } = useOverview(selectedApp?.id);
   const { data: teams, isLoading: teamsLoading } = useTeams();
+
+  // Determine zoom level label
+  const zoomLabel = selectedApp
+    ? selectedEnv
+      ? `${selectedApp.name} · ${selectedEnv}`
+      : selectedApp.name
+    : 'Portfolio';
+
+  const subLabel = selectedApp
+    ? selectedEnv
+      ? `Focused view — ${selectedApp.name} in ${selectedEnv}`
+      : `Application view — all environments`
+    : 'Overview across all teams and applications';
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">Overview across all teams</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard · {zoomLabel}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{subLabel}</p>
+        </div>
+        {selectedApp && (
+          <div className="flex items-center gap-2 shrink-0">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-white text-sm font-bold"
+              style={{ backgroundColor: selectedApp.color ?? '#6b7280' }}
+            >
+              {selectedApp.icon || selectedApp.name.charAt(0)}
+            </div>
+            {selectedEnv && <EnvironmentBadge environment={selectedEnv} />}
+          </div>
+        )}
       </div>
 
       {/* Stat cards */}

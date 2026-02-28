@@ -16,7 +16,7 @@ export function useCollections(teamId?: string) {
   return useQuery({
     queryKey: ['library-collections', teamId],
     queryFn: () => api.getCollections(teamId),
-    staleTime: 30_000,
+    staleTime: 120_000,
   });
 }
 
@@ -60,7 +60,7 @@ export function useLibraryTestCases(params: {
   return useQuery({
     queryKey: ['library-test-cases', params],
     queryFn: () => api.getLibraryTestCases(params),
-    staleTime: 30_000,
+    staleTime: 120_000,
   });
 }
 
@@ -68,7 +68,7 @@ export function useLibraryTestCase(id: string) {
   return useQuery({
     queryKey: ['library-test-case', id],
     queryFn: () => api.getLibraryTestCase(id),
-    staleTime: 30_000,
+    staleTime: 120_000,
     enabled: !!id,
   });
 }
@@ -211,8 +211,8 @@ export function useCreateSuggestion(testCaseId: string) {
 export function useReviewSuggestion() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: SuggestionStatus }) =>
-      api.reviewSuggestion(id, status),
+    mutationFn: ({ id, status, reviewNote }: { id: string; status: SuggestionStatus; reviewNote?: string }) =>
+      api.reviewSuggestion(id, status, reviewNote),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['library-suggestions-all'] });
       qc.invalidateQueries({ queryKey: ['library-suggestions'] });
@@ -283,5 +283,26 @@ export function useRemoveDependency(libraryTestCaseId: string) {
   return useMutation({
     mutationFn: (dependsOnId: string) => api.removeDependency(libraryTestCaseId, dependsOnId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['library-test-case', libraryTestCaseId] }),
+  });
+}
+
+// ── Import from Runs (stub) ──────────────────────────────────────────────────
+
+export function useRunTestCaseCandidates(teamId?: string) {
+  return useQuery({
+    queryKey: ['run-test-case-candidates', teamId],
+    queryFn: () => api.getRunTestCaseCandidates(teamId),
+    staleTime: 30_000,
+  });
+}
+
+// ── Fuzzy Match (stub) ───────────────────────────────────────────────────────
+
+export function useFuzzyMatches(libraryTestCaseId: string) {
+  return useQuery({
+    queryKey: ['fuzzy-matches', libraryTestCaseId],
+    queryFn: () => api.getFuzzyMatches(libraryTestCaseId),
+    staleTime: 60_000,
+    enabled: !!libraryTestCaseId,
   });
 }

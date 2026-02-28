@@ -1,4 +1,7 @@
 import path from 'path';
+import { execSync } from 'child_process';
+
+export type RunSourceValue = 'local' | 'ci' | 'manual';
 
 export interface QCMonitorConfig {
   /** Base URL of your QC Monitor API, e.g. http://localhost:3001 */
@@ -15,6 +18,67 @@ export interface QCMonitorConfig {
   captureVideo?: boolean;
   /** Capture and upload traces on failure (default: true) */
   captureTrace?: boolean;
+  /** Application slug (will be required in G2, optional for now) */
+  application?: string;
+  /** Deployment environment: "local", "staging", "production", etc. Auto-detected if not set. */
+  environment?: string;
+  /** Git branch name. Auto-detected from git or CI env vars if not set. */
+  branch?: string;
+  /** Run source. Auto-detected from CI env vars if not set. */
+  source?: RunSourceValue;
+}
+
+// ── Auto-detection utilities ──────────────────────────────────────────────────
+
+/** CI environment variable names that indicate a CI run. */
+const CI_ENV_VARS = [
+  'CI', 'GITHUB_ACTIONS', 'GITLAB_CI', 'JENKINS_URL',
+  'BITBUCKET_BUILD_NUMBER', 'CIRCLECI', 'TRAVIS',
+  'AZURE_PIPELINES', 'CODEBUILD_BUILD_ID', 'TEAMCITY_VERSION',
+];
+
+export function detectSource(): RunSourceValue {
+  // Allow explicit override via env var (used by retry watcher to tag runs as MANUAL)
+  const override = process.env['QC_MONITOR_SOURCE'];
+  if (override === 'manual') return 'manual';
+  if (override === 'ci') return 'ci';
+  if (override === 'local') return 'local';
+  for (const v of CI_ENV_VARS) {
+    if (process.env[v]) return 'ci';
+  }
+  return 'local';
+}
+
+export function detectBranch(): string | null {
+  // 1. Check CI provider env vars first
+  const branchEnvVars = [
+    'GITHUB_HEAD_REF', 'GITHUB_REF_NAME',
+    'GITLAB_CI_COMMIT_BRANCH', 'CI_COMMIT_BRANCH',
+    'GIT_BRANCH', 'BRANCH_NAME', 'BITBUCKET_BRANCH',
+  ];
+  for (const v of branchEnvVars) {
+    const val = process.env[v];
+    if (val) return val.replace(/^refs\/heads\//, '');
+  }
+  // 2. Try git CLI
+  try {
+    const branch = execSync('git branch --show-current', { stdio: ['pipe', 'pipe', 'pipe'] })
+      .toString()
+      .trim();
+    return branch || null;
+  } catch {
+    return null;
+  }
+}
+
+export function detectEnvironment(source: RunSourceValue): string | null {
+  const envVars = ['NODE_ENV', 'APP_ENV', 'ENVIRONMENT', 'DEPLOY_ENV'];
+  for (const v of envVars) {
+    if (process.env[v]) return process.env[v]!;
+  }
+  if (source === 'ci') return 'staging';
+  if (source === 'local') return 'local';
+  return null;
 }
 
 const CONFIG_FILES = [
@@ -48,6 +112,10 @@ async function tryLoadFile(): Promise<Partial<QCMonitorConfig>> {
 export async function loadConfig(overrides: Partial<QCMonitorConfig> = {}): Promise<QCMonitorConfig> {
   const fileConfig = await tryLoadFile();
 
+  // Resolve source first so environment detection can use it
+  const source: RunSourceValue =
+    overrides.source ?? fileConfig.source ?? detectSource();
+
   return {
     apiUrl:
       overrides.apiUrl ||
@@ -64,5 +132,11 @@ export async function loadConfig(overrides: Partial<QCMonitorConfig> = {}): Prom
     captureScreenshot: overrides.captureScreenshot ?? fileConfig.captureScreenshot ?? true,
     captureVideo: overrides.captureVideo ?? fileConfig.captureVideo ?? true,
     captureTrace: overrides.captureTrace ?? fileConfig.captureTrace ?? true,
+    application: overrides.application ?? fileConfig.application,
+    source,
+    branch:
+      overrides.branch ?? fileConfig.branch ?? detectBranch() ?? undefined,
+    environment:
+      overrides.environment ?? fileConfig.environment ?? detectEnvironment(source) ?? undefined,
   };
 }

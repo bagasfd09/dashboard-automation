@@ -146,21 +146,56 @@ export function DashboardSkeleton() {
 
 export function RunsSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="space-y-1">
-        <Skeleton className="h-8 w-28 bg-muted" />
-        <Skeleton className="h-4 w-32 bg-muted" />
+        <Skeleton className="h-7 w-32 bg-muted" />
+        <Skeleton className="h-4 w-52 bg-muted" />
       </div>
 
-      <FilterBarSkeleton inputs={1} />
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-card border border-border rounded-xl p-3.5">
+            <Skeleton className="h-3 w-28 bg-muted mb-2" />
+            <Skeleton className="h-8 w-16 bg-muted mb-1" />
+            <Skeleton className="h-3 w-20 bg-muted" />
+          </div>
+        ))}
+      </div>
 
-      <TableCardSkeleton
-        title="All Runs"
-        cols={9}
-        rows={10}
-        headers={['Run ID', 'Team', 'Status', 'Total', 'Passed', 'Failed', 'Skipped', 'Duration', 'Started At']}
-      />
+      {/* Filter chips + search */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-8 w-24 bg-muted rounded-lg" />
+        ))}
+        <div className="flex-1" />
+        <Skeleton className="h-8 w-52 bg-muted rounded-full" />
+      </div>
+
+      {/* Run cards */}
+      <div className="space-y-2">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="bg-card border border-border rounded-xl p-3.5 px-4">
+            <div className="flex items-center gap-3.5">
+              <Skeleton className="w-9 h-9 rounded-[10px] bg-muted shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3 w-40 bg-muted" />
+                <Skeleton className="h-3 w-64 bg-muted" />
+              </div>
+              <div className="w-28 space-y-1.5 shrink-0">
+                <Skeleton className="h-2.5 w-20 bg-muted" />
+                <Skeleton className="h-1.5 w-full bg-muted rounded-full" />
+              </div>
+              <Skeleton className="w-16 h-5 bg-muted rounded shrink-0" />
+              <div className="w-16 shrink-0 space-y-1 text-right">
+                <Skeleton className="h-3 w-12 bg-muted ml-auto" />
+                <Skeleton className="h-3 w-10 bg-muted ml-auto" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <PaginationSkeleton />
     </div>
@@ -171,51 +206,81 @@ export function RunsSkeleton() {
 
 export function RunDetailSkeleton() {
   return (
-    <div className="space-y-6">
-      {/* Back link */}
-      <Skeleton className="h-5 w-24 bg-muted" />
+    <div className="space-y-5">
+      {/* Breadcrumb */}
+      <Skeleton className="h-4 w-32 bg-muted" />
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i} className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <Skeleton className="h-3 w-20 bg-muted" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-12 bg-muted" />
-            </CardContent>
-          </Card>
-        ))}
+      {/* Run header card */}
+      <div className="bg-card border border-border rounded-[14px] p-5 px-6 space-y-4">
+        {/* Top: status + title + back button */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-2 flex-1">
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="w-7 h-7 rounded-[8px] bg-muted shrink-0" />
+              <Skeleton className="h-7 w-48 bg-muted" />
+              <Skeleton className="h-5 w-20 bg-muted rounded" />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Skeleton className="h-5 w-16 bg-muted rounded-full" />
+              <Skeleton className="h-5 w-20 bg-muted rounded-full" />
+              <Skeleton className="h-4 w-16 bg-muted" />
+              <Skeleton className="h-4 w-14 bg-muted" />
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Skeleton className="h-8 w-16 bg-muted rounded-md" />
+            <Skeleton className="h-8 w-32 bg-muted rounded-md" />
+          </div>
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="bg-background rounded-lg p-2.5 text-center border border-border/50">
+              <Skeleton className="h-8 w-10 bg-muted mx-auto mb-1" />
+              <Skeleton className="h-3 w-12 bg-muted mx-auto" />
+            </div>
+          ))}
+        </div>
+
+        {/* Status bar */}
+        <Skeleton className="h-2 w-full rounded-full bg-muted" />
       </div>
 
-      {/* Progress bar */}
-      <Skeleton className="h-3 w-full rounded-full bg-muted" />
+      {/* Filter chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-8 w-20 bg-muted rounded-lg" />
+        ))}
+        <Skeleton className="h-8 w-52 bg-muted rounded-md ml-2" />
+        <div className="flex-1" />
+        <Skeleton className="h-8 w-28 bg-muted rounded-md" />
+      </div>
 
-      <FilterBarSkeleton inputs={2} />
-
-      {/* Suite cards */}
+      {/* Suite accordion skeletons */}
       {Array.from({ length: 3 }).map((_, i) => (
-        <Card key={i} className="bg-card border-border">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <Skeleton className="h-5 w-40 bg-muted" />
-              <div className="flex gap-3">
-                <Skeleton className="h-4 w-16 bg-muted" />
-                <Skeleton className="h-4 w-16 bg-muted" />
-              </div>
+        <div key={i} className="bg-card border border-border rounded-xl overflow-hidden">
+          {/* Suite header */}
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="w-3.5 h-3.5 bg-muted rounded shrink-0" />
+              <Skeleton className="h-4 w-44 bg-muted" />
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableBody>
-                {Array.from({ length: 4 }).map((_, j) => (
-                  <SkRow key={j} cols={5} />
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-4 w-10 bg-muted" />
+              <Skeleton className="h-4 w-14 bg-muted rounded-full" />
+              <Skeleton className="h-3 w-6 bg-muted" />
+            </div>
+          </div>
+          {/* Test rows preview */}
+          {Array.from({ length: 3 }).map((_, j) => (
+            <div key={j} className="pl-10 pr-4 py-2.5 flex items-center gap-3 border-t border-border/40">
+              <Skeleton className="w-2 h-2 rounded-full bg-muted shrink-0" />
+              <Skeleton className="h-3 flex-1 bg-muted" />
+              <Skeleton className="h-3 w-12 bg-muted" />
+            </div>
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -637,6 +702,181 @@ export function CoverageSkeleton() {
         <TableCardSkeleton title="By Status" cols={2} rows={4} headers={['Status', 'Count']} />
         <TableCardSkeleton title="By Priority" cols={2} rows={4} headers={['Priority', 'Count']} />
       </div>
+    </div>
+  );
+}
+
+// ── Releases list ──────────────────────────────────────────────────────────
+
+export function ReleasesListSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <Skeleton className="h-8 w-28 bg-muted" />
+          <Skeleton className="h-4 w-56 bg-muted" />
+        </div>
+        <Skeleton className="h-9 w-32 bg-muted rounded-md" />
+      </div>
+      {/* Tab bar */}
+      <div className="flex gap-1">
+        <Skeleton className="h-9 w-28 bg-muted rounded-md" />
+        <Skeleton className="h-9 w-28 bg-muted rounded-md" />
+      </div>
+      {/* Release cards */}
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Card key={i} className="bg-card border-border border-l-4 border-l-muted">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <Skeleton className="h-5 w-48 bg-muted" />
+                <Skeleton className="h-4 w-32 bg-muted" />
+              </div>
+              <Skeleton className="h-6 w-20 bg-muted rounded-full" />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-2.5 w-full bg-muted rounded-full" />
+            <div className="flex gap-4">
+              <Skeleton className="h-4 w-24 bg-muted" />
+              <Skeleton className="h-4 w-24 bg-muted" />
+              <Skeleton className="h-4 w-24 bg-muted" />
+            </div>
+            <Skeleton className="h-4 w-44 bg-muted" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ── Release detail ──────────────────────────────────────────────────────────
+
+export function ReleaseDetailSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Breadcrumb */}
+      <Skeleton className="h-4 w-36 bg-muted" />
+      {/* Header card */}
+      <Card className="bg-card border-border">
+        <CardContent className="pt-6 space-y-4">
+          <div className="flex items-start justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64 bg-muted" />
+              <div className="flex gap-3">
+                <Skeleton className="h-4 w-24 bg-muted" />
+                <Skeleton className="h-4 w-28 bg-muted" />
+              </div>
+              <Skeleton className="h-6 w-20 bg-muted rounded-full" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-16 bg-muted rounded-md" />
+              <Skeleton className="h-9 w-36 bg-muted rounded-md" />
+              <Skeleton className="h-9 w-28 bg-muted rounded-md" />
+            </div>
+          </div>
+          <Skeleton className="h-4 w-3/4 bg-muted" />
+          {/* Summary bar */}
+          <div className="border border-border rounded-lg p-4 space-y-2">
+            <div className="flex gap-6">
+              <Skeleton className="h-4 w-24 bg-muted" />
+              <Skeleton className="h-4 w-24 bg-muted" />
+              <Skeleton className="h-4 w-24 bg-muted" />
+            </div>
+            <Skeleton className="h-2.5 w-full bg-muted rounded-full" />
+          </div>
+        </CardContent>
+      </Card>
+      {/* Checklist sections */}
+      {Array.from({ length: 2 }).map((_, s) => (
+        <div key={s} className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-5 w-40 bg-muted" />
+            <Skeleton className="h-8 w-32 bg-muted rounded-md" />
+          </div>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="bg-card border-border">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-6 w-6 bg-muted rounded-full shrink-0" />
+                  <div className="flex-1 space-y-1">
+                    <Skeleton className="h-4 w-3/4 bg-muted" />
+                    <Skeleton className="h-3 w-1/2 bg-muted" />
+                  </div>
+                  <Skeleton className="h-6 w-12 bg-muted rounded" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Import from Runs Modal ──────────────────────────────────────────────────
+
+export function ImportFromRunsSkeleton() {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: 3 }).map((_, g) => (
+        <div key={g} className="space-y-2">
+          {/* Run date header */}
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-3 w-3 bg-muted rounded" />
+            <Skeleton className="h-3 w-32 bg-muted" />
+            <Skeleton className="h-4 w-16 bg-muted rounded-full" />
+          </div>
+          {/* Test case rows */}
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="flex items-start gap-3 p-2.5 border border-border rounded-lg">
+              <Skeleton className="h-4 w-4 bg-muted rounded shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-3/4 bg-muted" />
+                <Skeleton className="h-2.5 w-1/2 bg-muted" />
+              </div>
+              <Skeleton className="h-5 w-14 bg-muted rounded-full shrink-0" />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Suggestion Review Cards ─────────────────────────────────────────────────
+
+export function SuggestionReviewSkeleton() {
+  return (
+    <div className="space-y-3">
+      {/* Batch actions bar */}
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-4 w-32 bg-muted" />
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-24 bg-muted rounded-md" />
+          <Skeleton className="h-8 w-24 bg-muted rounded-md" />
+        </div>
+      </div>
+      {/* Suggestion cards */}
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Card key={i} className="bg-card border-border">
+          <CardContent className="pt-4 pb-4 space-y-3">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1.5 flex-1">
+                <Skeleton className="h-4 w-3/4 bg-muted" />
+                <Skeleton className="h-3 w-1/2 bg-muted" />
+              </div>
+              <Skeleton className="h-5 w-16 bg-muted rounded-full" />
+            </div>
+            <Skeleton className="h-3 w-full bg-muted" />
+            <Skeleton className="h-3 w-2/3 bg-muted" />
+            <div className="flex gap-2 pt-1">
+              <Skeleton className="h-8 w-20 bg-muted rounded-md" />
+              <Skeleton className="h-8 w-28 bg-muted rounded-md" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }

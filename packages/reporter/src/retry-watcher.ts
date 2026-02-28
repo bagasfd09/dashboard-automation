@@ -72,6 +72,10 @@ export class RetryWatcher {
           cwd: process.cwd(),
           stdio: 'inherit',
           shell: true,
+          env: {
+            ...process.env,
+            QC_MONITOR_SOURCE: 'manual',
+          },
         },
       );
 
